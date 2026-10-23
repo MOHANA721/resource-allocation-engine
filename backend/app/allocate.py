@@ -271,10 +271,32 @@ def run_hungarian(techs: list[Technician], requests: list[Request], weights: Wei
         )
         pending.append((request, row_assignment))
     assignments = [
-        row if row is not None else _unassigned(request, techs, used, weights)
+        row if row is not None else _hungarian_unassigned(request, techs, weights)
         for request, row in pending
     ]
     return _finish(assignments, techs, started)
+
+
+def _hungarian_unassigned(request: Request, techs: list[Technician], weights: Weights) -> Assignment:
+    """Hungarian drops a servable request only because the whole plan is cheaper without it."""
+    options = _options(request, techs, {}, weights)
+    if not options:
+        return _unassigned(request, techs, {}, weights)
+    _cost, _tech_id, nearest, distance, _held = options[0]
+    penalty = unserved_penalty(request.priority, weights)
+    return Assignment(
+        request_id=request.id,
+        customer=request.customer,
+        cost=penalty,
+        explanation=(
+            f"Unserved {request.customer}: left open in the minimum-cost plan. "
+            f"Leaving it open costs {penalty:.1f}, which is less than rearranging "
+            f"technicians to serve it. Nearest qualified technician: {nearest.name} "
+            f"at {distance:.1f} km."
+        ),
+        priority=request.priority,
+        required_skill=request.required_skill,
+    )
 
 
 def allocate(techs: list[Technician], requests: list[Request], weights: Weights | None = None) -> AllocateResponse:

@@ -57,7 +57,14 @@ With the virtual environment active, from this folder:
 pytest
 ```
 
-`pytest.ini` adds `backend` to the Python path. The sweep behind `ANALYSIS.md` is:
+`pytest.ini` adds `backend` to the Python path. The backend suite checks Hungarian against a brute-force search on small scenarios, every hard rule (skill, capacity, arrival time, shift end), how each weight changes each algorithm, metric values worked by hand on the trap, explanation text, skill gaps, repeatability, API input validation, and the largest slider setting.
+
+The UI tests cover the metric table helpers (formatting, hover tips, and which value is marked best):
+
+```bash
+cd frontend
+npm test
+``` The sweep behind `ANALYSIS.md` is:
 
 ```powershell
 # Windows
