@@ -1,0 +1,171 @@
+:root {
+  color: #1c1917;
+  background: #f4f1ea;
+  font-family: "Segoe UI", system-ui, sans-serif;
+}
+
+* { box-sizing: border-box; }
+
+body { margin: 0; }
+
+button, select, input { font: inherit; }
+
+.app { max-width: 1280px; margin: 0 auto; padding: 24px 20px 48px; }
+
+header h1 { margin: 0 0 6px; font-size: 28px; }
+
+header p { margin: 0; max-width: 760px; color: #44403c; }
+
+.guide {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1.2fr;
+  gap: 16px;
+  margin-top: 20px;
+}
+
+.guide article {
+  background: #fff;
+  border: 1px solid #e7e5e4;
+  border-radius: 12px;
+  padding: 14px 16px;
+}
+
+.guide h2 { margin: 0 0 8px; font-size: 16px; }
+
+.guide p, .guide li { margin: 0 0 8px; color: #44403c; font-size: 14px; line-height: 1.45; }
+
+.guide ul { margin: 0 0 8px; padding-left: 18px; }
+
+.controls {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 16px;
+  margin: 20px 0;
+  padding: 16px;
+  background: #fff;
+  border: 1px solid #e7e5e4;
+  border-radius: 12px;
+}
+
+.controls button {
+  align-self: end;
+  padding: 8px 12px;
+  border-radius: 8px;
+  border: 1px solid #1c1917;
+  background: #1c1917;
+  color: #fafaf9;
+  cursor: pointer;
+}
+
+label { display: flex; flex-direction: column; gap: 6px; font-size: 14px; }
+
+label span { color: #57534e; }
+
+select, .scenario-note { font-size: 14px; }
+
+select { padding: 8px; border-radius: 8px; border: 1px solid #d6d3d1; background: #fff; }
+
+.scenario-note { margin: -8px 0 16px; color: #44403c; }
+
+.metric-note {
+  background: #fff;
+  border: 1px solid #e7e5e4;
+  border-radius: 12px;
+  padding: 14px 16px;
+  margin-bottom: 12px;
+}
+
+.metric-note h2 { margin: 0 0 8px; font-size: 16px; }
+
+.metric-note p { margin: 0 0 8px; color: #44403c; font-size: 14px; line-height: 1.45; }
+
+.metric-note p:last-child { margin-bottom: 0; }
+
+.behavior { margin-top: 12px; }
+
+.behavior ul { margin: 8px 0 0; padding-left: 18px; }
+
+.behavior li { margin: 0 0 8px; color: #44403c; font-size: 14px; line-height: 1.45; }
+
+.metrics { width: 100%; border-collapse: collapse; background: #fff; border-radius: 12px; overflow: visible; }
+
+.metrics .tip {
+  position: relative;
+  cursor: help;
+  border-bottom: 1px dotted currentColor;
+}
+
+.metrics .tip:hover::after,
+.metrics .tip:focus::after {
+  content: attr(data-tip);
+  position: absolute;
+  left: 50%;
+  top: calc(100% + 8px);
+  transform: translateX(-50%);
+  width: 240px;
+  padding: 8px 10px;
+  border-radius: 8px;
+  background: #1c1917;
+  color: #fafaf9;
+  font-size: 12px;
+  font-weight: 400;
+  line-height: 1.4;
+  text-align: left;
+  white-space: normal;
+  z-index: 5;
+  box-shadow: 0 8px 24px rgba(28, 25, 23, 0.18);
+}
+
+.metrics th, .metrics td { padding: 10px 12px; text-align: right; border-bottom: 1px solid #e7e5e4; }
+
+.metrics th:first-child, .metrics td:first-child { text-align: left; }
+
+.metrics th { background: #1c1917; color: #fafaf9; font-weight: 600; }
+
+.best { background: #ecfdf5; }
+
+.maps { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; margin-top: 16px; }
+
+.roster { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-top: 16px; }
+
+.roster ul { margin: 0; padding-left: 18px; max-height: 220px; overflow: auto; }
+
+.roster li { margin: 0 0 6px; color: #44403c; font-size: 14px; }
+
+.panel { background: #fff; border: 1px solid #e7e5e4; border-radius: 12px; padding: 12px; min-width: 0; }
+
+.panel-head { display: flex; justify-content: space-between; align-items: center; gap: 12px; margin-bottom: 8px; }
+
+.map-frame, .schematic { height: 420px; border-radius: 10px; overflow: hidden; background: #f5f5f4; }
+
+.leaflet-container { height: 100%; width: 100%; }
+
+.reason { margin-top: 10px; padding: 10px 12px; background: #fafaf9; border-radius: 8px; min-height: 48px; }
+
+.reason strong { display: block; margin-bottom: 4px; }
+
+.job-list { list-style: none; margin: 10px 0 0; padding: 0; max-height: 180px; overflow: auto; }
+
+.job-list button {
+  width: 100%;
+  text-align: left;
+  border: 0;
+  background: transparent;
+  padding: 6px 4px;
+  border-bottom: 1px solid #f5f5f4;
+  cursor: pointer;
+}
+
+.job-list button.active { background: #ecfdf5; }
+
+.unassigned { color: #7c3aed; }
+
+.error, .loading { padding: 12px 14px; background: #fff7ed; border-radius: 8px; }
+
+.legend { display: flex; gap: 16px; margin-top: 8px; color: #57534e; font-size: 13px; }
+
+.swatch { display: inline-block; width: 10px; height: 10px; border-radius: 50%; margin-right: 6px; }
+
+@media (max-width: 1100px) {
+  .maps, .roster, .guide { grid-template-columns: 1fr; }
+}
