@@ -40,7 +40,8 @@ class Weights(BaseModel):
     must_serve_p5: bool = Field(True, description="Never leave a priority-5 request open if it can be served")
 
 
-Capacity = Literal["jobs", "minutes"]
+Capacity = Literal["jobs", "minutes", "routed"]
+DistanceSource = Literal["osrm", "detour", "straight"]
 
 
 class Assignment(BaseModel):
@@ -53,6 +54,7 @@ class Assignment(BaseModel):
     explanation: str
     priority: int
     required_skill: str
+    stop: Optional[int] = Field(None, description="Position in the technician's route, in routed mode")
 
 
 class SkillGap(BaseModel):
@@ -103,7 +105,15 @@ class AllocateRequest(BaseModel):
     weights: Weights = Weights()
     capacity: Capacity = Field(
         "jobs",
-        description="jobs: max_jobs only. minutes: also fit travel there and back plus work inside the shift length",
+        description=(
+            "jobs: max_jobs only. minutes: also fit travel there and back plus work inside the shift length. "
+            "routed: jobs are driven in order, home to job to job, and every stop must fit its window and the shift"
+        ),
+    )
+    distance: DistanceSource = Field(
+        "osrm",
+        description="osrm: road distances, falling back to detour if OSRM is unreachable. "
+        "detour: straight line times 1.35. straight: straight line",
     )
 
 
@@ -116,3 +126,5 @@ class AllocateResults(BaseModel):
 class AllocateResponse(BaseModel):
     skill_gaps: list[SkillGap]
     results: AllocateResults
+    distance_source: str = "straight"
+    distance_note: str = "Straight-line distances."

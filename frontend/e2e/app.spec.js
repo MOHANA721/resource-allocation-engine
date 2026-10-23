@@ -7,9 +7,27 @@ const REGRET = 2;
 async function loadTrap(page) {
   await page.goto("/");
   await expect(page.locator(".leaflet-container")).toHaveCount(3);
+  await page.getByLabel("Distance source").selectOption("straight");
   await page.getByRole("button", { name: "Load trap scenario" }).click();
   await expect(page.locator(".scenario-note")).toContainText("Trap");
+  await expect(page.locator(".scenario-note")).toContainText("Straight-line distances.");
 }
+
+test("road distances from OSRM are the default, with a stated fallback", async ({ page }) => {
+  await page.goto("/");
+  await expect(page.getByLabel("Distance source")).toHaveValue("osrm");
+  await expect(page.locator(".scenario-note")).toContainText(/Road distances from OSRM|OSRM road distances were unavailable/, {
+    timeout: 30_000,
+  });
+});
+
+test("routed mode prices each job by what it adds to the route", async ({ page }) => {
+  await loadTrap(page);
+  await page.getByLabel("Capacity").selectOption("routed");
+  await page.getByRole("button", { name: /Household panel/ }).click();
+  await expect(page.locator(".reason").nth(HUNGARIAN)).toContainText("adding 1.6 km to his route");
+  await expect(page.locator(".panel-head").nth(GREEDY)).toContainText("150.3 cost");
+});
 
 test("trap scenario: greedy strands the electrician, Hungarian and regret serve both", async ({ page }) => {
   await loadTrap(page);

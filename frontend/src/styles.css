@@ -69,6 +69,8 @@ select { padding: 8px; border-radius: 8px; border: 1px solid #d6d3d1; background
 
 .scenario-note { margin: -8px 0 16px; color: #44403c; }
 
+.scenario-note .warn { color: #b45309; font-weight: 600; }
+
 .metric-note {
   background: #fff;
   border: 1px solid #e7e5e4;

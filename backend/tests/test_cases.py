@@ -432,7 +432,7 @@ def _regret_recomputed(techs, requests, weights, capacity):
     return _finish([decisions[request.id] for request in requests], techs, 0.0)
 
 
-@pytest.mark.parametrize("capacity", ["jobs", "minutes"])
+@pytest.mark.parametrize("capacity", ["jobs", "minutes", "routed"])
 @pytest.mark.parametrize("weights", [Weights(), Weights(w_distance=2, w_balance=6, w_unassigned=4)])
 def test_incremental_regret_matches_recomputing_every_round(capacity, weights):
     for seed in range(15):
