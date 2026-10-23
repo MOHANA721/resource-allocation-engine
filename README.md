@@ -14,7 +14,9 @@ Defaults are distance 1, balance 2, and unassigned 30. A dropped priority-5 job 
 
 ## Run locally
 
-From this folder, in PowerShell:
+Requires Python 3.10 or newer and Node.js 18 or newer. The first install and the OpenStreetMap tiles need internet access. No API key is required.
+
+From this folder, on Windows (PowerShell):
 
 ```powershell
 python -m venv .venv
@@ -24,9 +26,19 @@ $env:PYTHONPATH = "backend"
 uvicorn app.main:app --port 8000
 ```
 
-In a second terminal:
+On macOS or Linux:
 
-```powershell
+```bash
+python3 -m venv .venv
+source .venv/bin/activate
+pip install -r requirements.txt
+export PYTHONPATH=backend
+uvicorn app.main:app --port 8000
+```
+
+In a second terminal, on any system:
+
+```bash
 cd frontend
 npm install
 npm run dev
@@ -35,22 +47,27 @@ npm run dev
 - API: http://127.0.0.1:8000/docs
 - UI: http://localhost:5173
 
-Node.js 18 or newer is required. The map uses OpenStreetMap tiles. No API key is required.
-
 The UI sliders rebuild the morning from headcount, demand, scarcity, and seed. Moving only the three weights reruns the algorithms on the same morning. **Load trap scenario** is the hand-built case: greedy gives the nearby plumbing job to the only electrician and leaves the panel open. Hungarian and regret serve both.
 
 ## Tests
 
-```powershell
-.\.venv\Scripts\Activate.ps1
+With the virtual environment active, from this folder:
+
+```bash
 pytest
 ```
 
 `pytest.ini` adds `backend` to the Python path. The sweep behind `ANALYSIS.md` is:
 
 ```powershell
+# Windows
 $env:PYTHONPATH = "backend"
-.\.venv\Scripts\python.exe backend\experiments.py
+python backend\experiments.py
+```
+
+```bash
+# macOS or Linux
+PYTHONPATH=backend python backend/experiments.py
 ```
 
 ## Approach
