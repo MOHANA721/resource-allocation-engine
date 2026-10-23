@@ -1,4 +1,4 @@
-"""Correctness and comparison tests for the multi-job dispatch engine."""
+"""Correctness and comparison tests for the multi-job field service engine."""
 
 from fastapi.testclient import TestClient
 

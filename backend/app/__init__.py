@@ -1,1 +1,1 @@
-"""Morning dispatch: assign one technician to each repair job."""
+"""Field service: assign technicians to repair requests."""

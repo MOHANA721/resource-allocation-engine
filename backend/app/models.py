@@ -1,4 +1,4 @@
-"""Request and response models for multi-job field dispatch."""
+"""Request and response models for multi-job field service."""
 
 from typing import Optional
 

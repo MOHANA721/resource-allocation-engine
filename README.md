@@ -1,6 +1,6 @@
 # Resource Allocation Engine
 
-Morning dispatch for field technicians in Bengaluru. Each technician can take two, three, or four jobs. Greedy, Hungarian, and regret assign the same morning with the same cost and the same hard rules. The winner is the lowest total cost. Hungarian is the minimum of that cost for this model.
+Field service for technicians in Bengaluru. Each technician can take two, three, or four jobs. Greedy, Hungarian, and regret assign the same morning with the same cost and the same hard rules. The winner is the lowest total cost. Hungarian is the minimum of that cost for this model.
 
 A job is feasible only when the technician has the skill, can arrive before the window closes, and can finish inside his shift. Travel is straight-line distance at 40 km/h, starting from home when the shift starts. Jobs are not chained into a route, so two jobs for one person are priced separately and can overlap.
 

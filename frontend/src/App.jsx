@@ -124,7 +124,7 @@ function FitBounds({ points }) {
   return null;
 }
 
-function DispatchMap({ scenario, result, colors, selectedId, onSelect }) {
+function FieldServiceMap({ scenario, result, colors, selectedId, onSelect }) {
   const byTech = useMemo(() => new Map(scenario.technicians.map((tech) => [tech.id, tech])), [scenario]);
   const byRequest = useMemo(() => new Map(scenario.requests.map((request) => [request.id, request])), [scenario]);
   const points = useMemo(
@@ -298,7 +298,7 @@ export default function App() {
   return (
     <div className="app">
       <header>
-        <h1>Morning dispatch, Bengaluru</h1>
+        <h1>Field service, Bengaluru</h1>
         <p>
           Three algorithms assign the same technicians to the same repair requests.
           The green number is the lowest total cost. Hover any metric to see what it counts.
@@ -403,7 +403,7 @@ export default function App() {
                   <span>{money(response.results[algo.id].metrics.total_cost)} cost</span>
                 </div>
                 <div className="map-frame">
-                  <DispatchMap
+                  <FieldServiceMap
                     scenario={scenario}
                     result={response.results[algo.id]}
                     colors={colors}
