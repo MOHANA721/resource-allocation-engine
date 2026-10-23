@@ -7,8 +7,18 @@ import time
 import pytest
 from fastapi.testclient import TestClient
 
-from app.allocate import allocate, skill_gaps
-from app.constraints import check, pair_distance
+from app.allocate import (
+    _assignment_from_option,
+    _finish,
+    _Load,
+    _open_or_decline,
+    _options,
+    _regret_key,
+    allocate,
+    run_regret,
+    skill_gaps,
+)
+from app.constraints import check, job_minutes, pair_distance, shift_minutes
 from app.generator import generate, trap_scenario
 from app.main import app
 from app.models import Request, Technician, Weights
@@ -51,16 +61,21 @@ def _pairs(result):
 
 
 def _brute_force_cost(techs, requests, weights):
-    """Cheapest total over every possible plan, including leaving any request open."""
-    best = math.inf
+    """Best (priority-5 misses, total cost) over every plan, including leaving any request open.
+
+    Misses only count when priority 5 is protected.
+    """
+    best = (math.inf, math.inf)
     choices = [None, *techs]
     for plan in itertools.product(choices, repeat=len(requests)):
         load: dict[str, int] = {}
         total = 0.0
+        missed_p5 = 0
         valid = True
         for tech, request in zip(plan, requests):
             if tech is None:
                 total += weights.w_unassigned * request.priority
+                missed_p5 += int(weights.must_serve_p5 and request.priority == 5)
                 continue
             if not check(tech, request, 0)[0]:
                 valid = False
@@ -73,18 +88,29 @@ def _brute_force_cost(techs, requests, weights):
         if not valid:
             continue
         total += sum(weights.w_balance * held * (held - 1) / 2 for held in load.values())
-        best = min(best, total)
+        best = min(best, (missed_p5, total))
     return best
 
 
-@pytest.mark.parametrize("weights", [Weights(), Weights(w_distance=5, w_balance=2, w_unassigned=5)])
+@pytest.mark.parametrize(
+    "weights",
+    [
+        Weights(),
+        Weights(w_distance=5, w_balance=2, w_unassigned=5),
+        Weights(w_distance=5, w_balance=2, w_unassigned=5, must_serve_p5=False),
+    ],
+)
 def test_hungarian_matches_brute_force_on_small_scenarios(weights):
     for seed in range(30):
         scenario = generate(3, 5, seed=seed, scarcity=0.5)
         live, _gaps = skill_gaps(scenario.technicians, scenario.requests)
         outcome = allocate(scenario.technicians, scenario.requests, weights)
-        expected = _brute_force_cost(scenario.technicians, live, weights)
-        assert outcome.results.hungarian.metrics.total_cost == pytest.approx(expected, abs=1e-6)
+        expected_missed, expected_cost = _brute_force_cost(scenario.technicians, live, weights)
+        hungarian = outcome.results.hungarian
+        missed = sum(1 for row in hungarian.assignments if row.technician_id is None and row.priority == 5)
+        if weights.must_serve_p5:
+            assert missed == expected_missed
+        assert hungarian.metrics.total_cost == pytest.approx(expected_cost, abs=1e-6)
 
 
 def test_job_must_finish_before_shift_ends():
@@ -115,10 +141,13 @@ def test_capacity_rule_is_reported():
     assert check(_tech("ravi", 12.97, 77.59, skills=("hvac",)), request, 0) == (False, "skill")
 
 
-def test_trap_weights_that_undervalue_drops_change_only_hungarian():
+CHEAP_DROP = Weights(w_distance=5, w_balance=2, w_unassigned=5, must_serve_p5=False)
+
+
+def test_trap_cheap_drops_change_only_hungarian_without_protection():
     scenario = trap_scenario()
     default = allocate(scenario.technicians, scenario.requests, Weights())
-    cheap_drop = allocate(scenario.technicians, scenario.requests, Weights(w_distance=5, w_balance=2, w_unassigned=5))
+    cheap_drop = allocate(scenario.technicians, scenario.requests, CHEAP_DROP)
     assert _pairs(cheap_drop.results.hungarian) == {"leak": "vikram", "panel": None}
     assert _pairs(cheap_drop.results.regret) == {"leak": "arjun", "panel": "vikram"}
     assert _pairs(cheap_drop.results.greedy) == _pairs(default.results.greedy)
@@ -126,17 +155,65 @@ def test_trap_weights_that_undervalue_drops_change_only_hungarian():
     assert cheap_drop.results.hungarian.metrics.total_cost < cheap_drop.results.regret.metrics.total_cost
 
 
-def test_unassigned_weight_never_changes_greedy_or_regret_choices():
-    for seed in range(10):
-        scenario = generate(8, 20, seed=seed, scarcity=0.6)
-        runs = [
-            allocate(scenario.technicians, scenario.requests, Weights(w_unassigned=value))
-            for value in (0.5, 30, 80)
-        ]
-        for name in ("greedy", "regret"):
-            first = _pairs(getattr(runs[0].results, name))
-            for run in runs[1:]:
-                assert _pairs(getattr(run.results, name)) == first
+def test_priority_five_protection_fixes_cheap_drop_weights():
+    scenario = trap_scenario()
+    protected = allocate(scenario.technicians, scenario.requests, CHEAP_DROP.model_copy(update={"must_serve_p5": True}))
+    assert _pairs(protected.results.hungarian) == {"leak": "arjun", "panel": "vikram"}
+    assert _pairs(protected.results.regret) == {"leak": "arjun", "panel": "vikram"}
+    assert protected.results.hungarian.metrics.high_priority_unassigned_count == 0
+
+
+def test_greedy_and_regret_leave_a_job_open_when_serving_costs_more():
+    tech = _tech("ravi", 12.97, 77.59)
+    far = _request("far", 12.97 + 25 / 111, 77.59, window=("09:00", "16:00"), priority=1)
+    dropped = allocate([tech], [far], Weights(w_unassigned=10))
+    for name in ALGORITHMS:
+        assert _pairs(getattr(dropped.results, name)) == {"far": None}
+    for name in ("greedy", "regret"):
+        row = getattr(dropped.results, name).assignments[0]
+        assert "left open on purpose" in row.explanation
+        assert "penalty of 10.0" in row.explanation
+    served = allocate([tech], [far], Weights(w_unassigned=30))
+    for name in ALGORITHMS:
+        assert _pairs(getattr(served.results, name)) == {"far": "ravi"}
+
+
+def test_priority_five_is_served_even_when_the_penalty_is_small():
+    tech = _tech("ravi", 12.97, 77.59)
+    far = _request("far", 12.97 + 25 / 111, 77.59, window=("09:00", "16:00"), priority=5)
+    protected = allocate([tech], [far], Weights(w_unassigned=1))
+    unprotected = allocate([tech], [far], Weights(w_unassigned=1, must_serve_p5=False))
+    for name in ALGORITHMS:
+        assert _pairs(getattr(protected.results, name)) == {"far": "ravi"}
+        assert _pairs(getattr(unprotected.results, name)) == {"far": None}
+
+
+def test_unassigned_weight_now_changes_greedy_and_regret():
+    for name in ("greedy", "regret"):
+        changed = False
+        for seed in range(10):
+            scenario = generate(8, 20, seed=seed, scarcity=0.6)
+            low, high = (
+                allocate(scenario.technicians, scenario.requests, Weights(w_unassigned=value, must_serve_p5=False))
+                for value in (0.5, 80)
+            )
+            low_open = getattr(low.results, name).metrics.unassigned_count
+            high_open = getattr(high.results, name).metrics.unassigned_count
+            assert low_open >= high_open
+            changed = changed or low_open > high_open
+        assert changed
+
+
+def test_regret_ranks_priority_before_regret():
+    techs = [_tech("a", 12.97, 77.59, max_jobs=1), _tech("b", 12.97, 77.70, max_jobs=1)]
+    near_a = _request("x", 12.971, 77.59, window=("08:00", "08:10"), priority=1)
+    near_b = _request("y", 12.971, 77.70, window=("08:00", "08:10"), priority=1)
+    urgent = _request("z", 12.97, 77.645, window=("09:00", "12:00"), priority=5)
+    outcome = allocate(techs, [near_a, near_b, urgent])
+    regret = _pairs(outcome.results.regret)
+    assert regret["z"] is not None
+    assert outcome.results.regret.metrics.high_priority_unassigned_count == 0
+    assert outcome.results.regret.metrics.unassigned_count == 1
 
 
 def test_scaling_every_weight_keeps_every_plan():
@@ -208,7 +285,7 @@ def test_explanations_name_the_real_reason():
     assert "kept for another request" in hungarian["leak"]
     assert "largest regret" in regret["panel"]
 
-    cheap_drop = allocate(scenario.technicians, scenario.requests, Weights(w_distance=5, w_balance=2, w_unassigned=5))
+    cheap_drop = allocate(scenario.technicians, scenario.requests, CHEAP_DROP)
     dropped = next(row for row in cheap_drop.results.hungarian.assignments if row.request_id == "panel")
     assert "left open in the minimum-cost plan" in dropped.explanation
     assert "25.0" in dropped.explanation
@@ -284,3 +361,94 @@ def test_largest_slider_setting_stays_fast_and_valid():
             assert load[row.technician_id] <= techs[row.technician_id].max_jobs
     assert outcome.results.hungarian.metrics.total_cost <= outcome.results.greedy.metrics.total_cost + 1e-6
     assert outcome.results.hungarian.metrics.total_cost <= outcome.results.regret.metrics.total_cost + 1e-6
+
+
+def test_working_minutes_limit_the_day():
+    tech = _tech("ravi", 12.97, 77.59, shift=("08:00", "12:00"), max_jobs=4)
+    requests = [_request(f"r{index}", 12.9701, 77.59, duration=90) for index in range(3)]
+    assert check(tech, requests[0], 2, minutes_used=180.0) == (False, "hours")
+    assert check(tech, requests[0], 1, minutes_used=90.0) == (True, "ok")
+    by_jobs = allocate([tech], requests)
+    by_minutes = allocate([tech], requests, capacity="minutes")
+    for name in ALGORITHMS:
+        assert getattr(by_jobs.results, name).metrics.assigned_count == 3
+        assert getattr(by_minutes.results, name).metrics.assigned_count == 2
+    for name in ("greedy", "regret"):
+        missed = next(row for row in getattr(by_minutes.results, name).assignments if row.technician_id is None)
+        assert "run out of working time" in missed.explanation
+    missed = next(row for row in by_minutes.results.hungarian.assignments if row.technician_id is None)
+    assert "fully booked by job count or working time" in missed.explanation
+
+
+def test_minutes_mode_keeps_every_plan_inside_the_shift():
+    tighter = False
+    for seed in range(20):
+        scenario = generate(10, 30, seed=seed, scarcity=0.4)
+        techs = {tech.id: tech for tech in scenario.technicians}
+        requests = {request.id: request for request in scenario.requests}
+        by_jobs = allocate(scenario.technicians, scenario.requests)
+        by_minutes = allocate(scenario.technicians, scenario.requests, capacity="minutes")
+        for name in ALGORITHMS:
+            used: dict[str, float] = {}
+            count: dict[str, int] = {}
+            for row in getattr(by_minutes.results, name).assignments:
+                if row.technician_id is None:
+                    continue
+                tech = techs[row.technician_id]
+                used[tech.id] = used.get(tech.id, 0.0) + job_minutes(tech, requests[row.request_id])
+                count[tech.id] = count.get(tech.id, 0) + 1
+                assert check(tech, requests[row.request_id], 0)[0]
+            for tech_id, total in used.items():
+                assert total <= shift_minutes(techs[tech_id]) + 1e-9
+                assert count[tech_id] <= techs[tech_id].max_jobs
+            fewer = getattr(by_minutes.results, name).metrics.assigned_count
+            tighter = tighter or fewer < getattr(by_jobs.results, name).metrics.assigned_count
+    assert tighter
+
+
+def _regret_recomputed(techs, requests, weights, capacity):
+    """Regret without the incremental update: every option is rebuilt every round."""
+    load = _Load(techs, capacity)
+    remaining = list(requests)
+    decisions = {}
+    while remaining:
+        options = {request.id: _options(request, techs, load, weights) for request in remaining}
+        settled = []
+        for request in remaining:
+            missed = _open_or_decline(request, options[request.id], techs, load, weights)
+            if missed is not None:
+                decisions[request.id] = missed
+                settled.append(request.id)
+        if settled:
+            remaining = [request for request in remaining if request.id not in settled]
+            continue
+        request = min(remaining, key=lambda item: _regret_key(item, options[item.id]))
+        _cost, _tech_id, tech, distance, jobs_held = options[request.id][0]
+        decisions[request.id] = _assignment_from_option(
+            request, tech, distance, jobs_held, weights, options[request.id][1:3]
+        )
+        load.add(tech, request)
+        remaining = [candidate for candidate in remaining if candidate.id != request.id]
+    return _finish([decisions[request.id] for request in requests], techs, 0.0)
+
+
+@pytest.mark.parametrize("capacity", ["jobs", "minutes"])
+@pytest.mark.parametrize("weights", [Weights(), Weights(w_distance=2, w_balance=6, w_unassigned=4)])
+def test_incremental_regret_matches_recomputing_every_round(capacity, weights):
+    for seed in range(15):
+        scenario = generate(10, 30, seed=seed, scarcity=0.5)
+        live, _gaps = skill_gaps(scenario.technicians, scenario.requests)
+        fast = run_regret(scenario.technicians, live, weights, capacity)
+        slow = _regret_recomputed(scenario.technicians, live, weights, capacity)
+        assert _pairs(fast) == _pairs(slow)
+        assert fast.metrics.total_cost == pytest.approx(slow.metrics.total_cost)
+
+
+def test_api_capacity_mode():
+    scenario = client.get("/api/scenario/trap").json()
+    body = {"technicians": scenario["technicians"], "requests": scenario["requests"]}
+    assert client.post("/api/allocate", json={**body, "capacity": "minutes"}).status_code == 200
+    assert client.post("/api/allocate", json={**body, "capacity": "hours"}).status_code == 422
+    unprotected = {"w_distance": 5, "w_balance": 2, "w_unassigned": 5, "must_serve_p5": False}
+    response = client.post("/api/allocate", json={**body, "weights": unprotected}).json()
+    assert response["results"]["hungarian"]["metrics"]["high_priority_unassigned_count"] == 1

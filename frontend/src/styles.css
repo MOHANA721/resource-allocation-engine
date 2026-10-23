@@ -59,6 +59,8 @@ header p { margin: 0; max-width: 760px; color: #44403c; }
 
 label { display: flex; flex-direction: column; gap: 6px; font-size: 14px; }
 
+label.check { flex-direction: row; align-items: center; align-self: end; gap: 8px; }
+
 label span { color: #57534e; }
 
 select, .scenario-note { font-size: 14px; }

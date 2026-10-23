@@ -94,8 +94,13 @@ function Behavior({ response }) {
         </li>
         <li>
           Regret cost {money(regret.total_cost)}, urgent misses {regret.high_priority_unassigned_count}, gap {money(regret.optimality_gap)}.
-          A request with only one feasible technician goes first. That is how it avoids the trap greedy falls into.
+          It handles the highest priority first. Within a priority, a request with only one feasible technician goes first. That is how it avoids the trap greedy falls into.
         </li>
+        {[greedy, regret].some((metrics) => metrics.optimality_gap < -0.05) && (
+          <li>
+            A negative gap means that algorithm left a priority-5 request open. Hungarian must serve every priority-5 request it can, so it pays more here.
+          </li>
+        )}
         {shorterUrgent && (
           <li>
             Greedy urgent travel is {money(greedy.urgent_assigned_km)} km against Hungarian {money(hungarian.urgent_assigned_km)} km,
@@ -118,7 +123,8 @@ export default function App() {
   const [nRequests, setNRequests] = useState(20);
   const [seed, setSeed] = useState(1);
   const [scarcity, setScarcity] = useState(0.4);
-  const [weights, setWeights] = useState({ w_distance: 1, w_balance: 2, w_unassigned: 30 });
+  const [weights, setWeights] = useState({ w_distance: 1, w_balance: 2, w_unassigned: 30, must_serve_p5: true });
+  const [capacity, setCapacity] = useState("jobs");
   const [trap, setTrap] = useState(false);
   const [scenario, setScenario] = useState(null);
   const [response, setResponse] = useState(null);
@@ -152,6 +158,7 @@ export default function App() {
             technicians: nextScenario.technicians,
             requests: nextScenario.requests,
             weights,
+            capacity,
           }),
         });
         if (!allocated.ok) throw new Error("Could not allocate this scenario.");
@@ -165,7 +172,7 @@ export default function App() {
       }
     }, 300);
     return () => clearTimeout(handle);
-  }, [nTechs, nRequests, seed, scarcity, trap, weights]);
+  }, [nTechs, nRequests, seed, scarcity, trap, weights, capacity]);
 
   const colors = useMemo(() => {
     const map = new Map();
@@ -203,7 +210,9 @@ export default function App() {
           <ul>
             <li>Headcount, demand, scarcity, and seed build a new scenario. The same seed rebuilds the same scenario.</li>
             <li>Scarcity is the chance a technician has one skill instead of two. Higher scarcity means fewer people can cover a job.</li>
-            <li>Distance weight makes kilometers matter more. Balance weight charges a technician for each job he already holds. Unassigned weight is the cost of leaving a job open, multiplied by priority.</li>
+            <li>Distance weight makes kilometers matter more. Balance weight charges a technician for each job he already holds. Unassigned weight is the cost of leaving a job open, multiplied by priority. All three algorithms leave a job open when serving it would cost more than that.</li>
+            <li>Capacity: job count uses each technician's job limit. Working minutes also requires the drive there and back plus the work to fit inside his shift.</li>
+            <li>Always serve P5: a priority-5 request is never left open while someone can still take it.</li>
           </ul>
         </article>
       </section>
@@ -236,6 +245,17 @@ export default function App() {
         <label>
           Unassigned weight {weights.w_unassigned}
           <input type="range" min="0" max="80" step="5" value={weights.w_unassigned} onChange={(event) => setWeights({ ...weights, w_unassigned: Number(event.target.value) })} />
+        </label>
+        <label>
+          Capacity
+          <select value={capacity} onChange={(event) => setCapacity(event.target.value)}>
+            <option value="jobs">Job count</option>
+            <option value="minutes">Working minutes</option>
+          </select>
+        </label>
+        <label className="check">
+          <input type="checkbox" checked={weights.must_serve_p5} onChange={(event) => setWeights({ ...weights, must_serve_p5: event.target.checked })} />
+          Always serve P5 when possible
         </label>
         <button type="button" onClick={() => setTrap(true)}>Load trap scenario</button>
       </section>

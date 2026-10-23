@@ -33,12 +33,28 @@ def pair_distance(tech: Technician, request: Request) -> float:
     return haversine_km(tech.lat, tech.lng, request.lat, request.lng)
 
 
-def check(tech: Technician, request: Request, jobs_held: int) -> tuple[bool, str]:
+def shift_minutes(tech: Technician) -> int:
+    return minutes(tech.shift_end) - minutes(tech.shift_start)
+
+
+def job_minutes(tech: Technician, request: Request) -> float:
+    """Working time one job uses: drive there, do the work, drive home."""
+    return request.duration + 2 * travel_minutes(pair_distance(tech, request))
+
+
+def check(
+    tech: Technician,
+    request: Request,
+    jobs_held: int,
+    minutes_used: float | None = None,
+) -> tuple[bool, str]:
     """Feasibility from home. ``jobs_held`` is how many jobs this person already has.
 
     Travel starts when the shift starts. The technician must arrive before the
     window closes. Work then starts at the later of arrival and window open,
     and must finish before the shift ends. Jobs are not chained stop to stop.
+    When ``minutes_used`` is given, the job must also fit in the working time
+    he has left.
     """
     if jobs_held >= tech.max_jobs:
         return False, "full"
@@ -50,6 +66,8 @@ def check(tech: Technician, request: Request, jobs_held: int) -> tuple[bool, str
     start = max(arrival, minutes(request.window_start))
     if start + request.duration > minutes(tech.shift_end):
         return False, "shift"
+    if minutes_used is not None and minutes_used + job_minutes(tech, request) > shift_minutes(tech):
+        return False, "hours"
     return True, "ok"
 
 
@@ -59,3 +77,12 @@ def assignment_cost(distance_km: float, jobs_held: int, weights: Weights) -> flo
 
 def unserved_penalty(priority: int, weights: Weights) -> float:
     return weights.w_unassigned * priority
+
+
+def protected(priority: int, weights: Weights) -> bool:
+    return weights.must_serve_p5 and priority == 5
+
+
+def drop_threshold(priority: int, weights: Weights) -> float:
+    """Greedy and regret leave a request open only when every option costs more than this."""
+    return math.inf if protected(priority, weights) else unserved_penalty(priority, weights)

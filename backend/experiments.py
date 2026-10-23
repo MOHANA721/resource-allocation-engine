@@ -65,6 +65,26 @@ def sweep_load(seeds: int = 30) -> None:
         )
 
 
+def sweep_minutes(seeds: int = 30) -> None:
+    print("working-minutes capacity: 10 technicians, scarcity 0.4")
+    for n_requests in (16, 32):
+        gaps = {"greedy": [], "regret": []}
+        beaten = 0
+        for seed in range(seeds):
+            scenario = generate(10, n_requests, seed, 0.4)
+            outcome = allocate(scenario.technicians, scenario.requests, capacity="minutes")
+            optimal = outcome.results.hungarian.metrics.total_cost
+            for name in gaps:
+                cost = getattr(outcome.results, name).metrics.total_cost
+                gaps[name].append(_gap(cost, optimal))
+                beaten += cost < optimal - 1e-6
+        print(
+            f"  requests {n_requests:2d}  greedy gap {_mean(gaps['greedy']):.2f}%  "
+            f"regret gap {_mean(gaps['regret']):.2f}%  "
+            f"heuristic cheaper than Hungarian in {beaten} of {2 * seeds}"
+        )
+
+
 def show_trap() -> None:
     scenario = trap_scenario()
     outcome = allocate(scenario.technicians, scenario.requests)
@@ -83,3 +103,4 @@ if __name__ == "__main__":
     show_trap()
     sweep_scarcity()
     sweep_load()
+    sweep_minutes()

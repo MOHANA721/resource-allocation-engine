@@ -44,4 +44,4 @@ def trap() -> Scenario:
 
 @app.post("/api/allocate", response_model=AllocateResponse)
 def allocate_route(body: AllocateRequest) -> AllocateResponse:
-    return allocate(body.technicians, body.requests, body.weights)
+    return allocate(body.technicians, body.requests, body.weights, body.capacity)

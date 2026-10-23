@@ -2,7 +2,7 @@
 
 Field service for technicians in Bengaluru. Each technician can take two, three, or four jobs. Greedy, Hungarian, and regret assign the same scenario with the same cost and the same hard rules. The winner is the lowest total cost. Hungarian is the minimum of that cost for this model.
 
-A job is feasible only when the technician has the skill, can arrive before the window closes, and can finish inside his shift. Travel is straight-line distance at 40 km/h, starting from home when the shift starts. Jobs are not chained into a route, so two jobs for one person are priced separately and can overlap.
+A job is feasible only when the technician has the skill and a free job slot, can arrive before the window closes, and can finish inside his shift. Travel is straight-line distance at 40 km/h, starting from home when the shift starts. Jobs are not chained into a route, so two jobs for one person are priced separately and can overlap.
 
 ```
 cost = distance_weight * km + balance_weight * jobs_already_held
@@ -10,7 +10,9 @@ unserved = unassigned_weight * priority
 total = sum of those
 ```
 
-Defaults are distance 1, balance 2, and unassigned 30. A dropped priority-5 job costs 150.
+Defaults are distance 1, balance 2, and unassigned 30. A dropped priority-5 job costs 150. All three algorithms leave a job open when serving it costs more than its penalty. With **Always serve P5** on (the default), a priority-5 job is never left open while someone can take it.
+
+**Capacity** is either the job count (`max_jobs`) or working minutes. In working-minutes mode, each technician's drive there, work, and drive back must also fit inside his shift length.
 
 ## Report
 
@@ -51,7 +53,7 @@ npm run dev
 - API: http://127.0.0.1:8000/docs
 - UI: http://localhost:5173
 
-The UI sliders build a new scenario from headcount, demand, scarcity, and seed. Moving only the three weights reruns the algorithms on the same scenario. **Load trap scenario** is the hand-built case: greedy gives the nearby plumbing job to the only electrician and leaves the panel open. Hungarian and regret serve both.
+The UI sliders build a new scenario from headcount, demand, scarcity, and seed. Moving the three weights, the capacity selector, or the P5 checkbox reruns the algorithms on the same scenario. **Load trap scenario** is the hand-built case: greedy gives the nearby plumbing job to the only electrician and leaves the panel open. Hungarian and regret serve both.
 
 ## Tests
 
@@ -61,13 +63,21 @@ With the virtual environment active, from this folder:
 pytest
 ```
 
-`pytest.ini` adds `backend` to the Python path. The backend suite checks Hungarian against a brute-force search on small scenarios, every hard rule (skill, capacity, arrival time, shift end), how each weight changes each algorithm, metric values worked by hand on the trap, explanation text, skill gaps, repeatability, API input validation, and the largest slider setting.
+`pytest.ini` adds `backend` to the Python path. The backend suite checks:
 
-The UI tests cover the metric table helpers (formatting, hover tips, and which value is marked best):
+- Hungarian against a brute-force search on small scenarios, with and without priority-5 protection.
+- Every hard rule (skill, capacity, arrival time, shift end, working minutes), and how each weight and setting changes each algorithm.
+- That incremental regret gives the same plans as recomputing every round.
+- Metric values worked by hand on the trap, explanation text, skill gaps, and repeatability.
+- API input validation and the largest slider setting.
+
+The UI unit tests cover the metric table helpers (formatting, hover tips, and which value is marked best). The browser tests use Playwright. They start the API and the UI themselves, or reuse them if already running, then check the trap, the P5 checkbox, and the capacity selector in Chromium.
 
 ```bash
 cd frontend
 npm test
+npx playwright install chromium   # first time only
+npm run test:e2e
 ```
 
 The experiment sweep behind the results in `REPORT.html` is:
@@ -87,11 +97,11 @@ PYTHONPATH=backend python backend/experiments.py
 
 Technicians are generated first and never edited to fit demand. Request skills are drawn only from skills that workforce has, skewed toward HVAC and plumbing. A request whose skill nobody has is a skill gap and is excluded from the algorithm scores.
 
-Greedy sorts by priority, then earliest window close, and commits the cheapest feasible technician. Hungarian expands each technician into `max_jobs` slots. Slot k pays the balance cost of k jobs already held, and each request has a dummy column priced at the drop penalty. Regret serves the request with the largest gap between its best and second-best option first. A request with only one feasible technician has infinite regret.
+Greedy sorts by priority, then earliest window close, and commits the cheapest feasible technician. Hungarian expands each technician into `max_jobs` slots. Slot k pays the balance cost of k jobs already held, and each request has a dummy column priced at the drop penalty, plus a large guard for protected priority-5 jobs. In working-minutes mode, Hungarian re-solves without a technician's longest job whenever he runs past his working time. Regret takes the highest priority first; within a priority it serves the request with the largest gap between its best and second-best option. A request with only one feasible technician has infinite regret. Its option lists are built once and updated only for the technician just assigned.
 
 ## Assumptions and limitations
 
 - Five skills: HVAC, electrical, plumbing, carpentry, appliance. Technician names are male Indian names.
 - Straight-line distance, constant 40 km/h, no road network.
-- Jobs are not sequenced. A later job is priced from home, not from the previous job, and two jobs can overlap in time.
+- Jobs are not sequenced. A later job is priced from home, not from the previous job, and two jobs can overlap in time. Working-minutes mode limits total time but does not order the visits.
 - The comparison score is total cost. Urgent kilometers (priority 4 and 5) are reported so a short trip is not mistaken for a better plan.

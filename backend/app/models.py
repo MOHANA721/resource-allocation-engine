@@ -1,6 +1,6 @@
 """Request and response models for multi-job field service."""
 
-from typing import Optional
+from typing import Literal, Optional
 
 from pydantic import BaseModel, Field
 
@@ -37,6 +37,10 @@ class Weights(BaseModel):
     w_distance: float = Field(1.0, ge=0)
     w_balance: float = Field(2.0, ge=0)
     w_unassigned: float = Field(30.0, ge=0)
+    must_serve_p5: bool = Field(True, description="Never leave a priority-5 request open if it can be served")
+
+
+Capacity = Literal["jobs", "minutes"]
 
 
 class Assignment(BaseModel):
@@ -97,6 +101,10 @@ class AllocateRequest(BaseModel):
     technicians: list[Technician]
     requests: list[Request]
     weights: Weights = Weights()
+    capacity: Capacity = Field(
+        "jobs",
+        description="jobs: max_jobs only. minutes: also fit travel there and back plus work inside the shift length",
+    )
 
 
 class AllocateResults(BaseModel):
