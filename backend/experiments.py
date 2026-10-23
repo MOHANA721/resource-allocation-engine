@@ -1,4 +1,4 @@
-"""Sweeps used by ANALYSIS.md. Run from the project root:
+"""Sweeps used by REPORT.html. Run from the project root:
 
     .venv\\Scripts\\python.exe backend\\experiments.py
 """

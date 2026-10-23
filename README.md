@@ -12,6 +12,10 @@ total = sum of those
 
 Defaults are distance 1, balance 2, and unassigned 30. A dropped priority-5 job costs 150.
 
+## Report
+
+[`REPORT.html`](REPORT.html) is the technical report and algorithm comparison. Open it in any browser; it works offline. It covers the design, hard and soft constraints, the three algorithms, worked case studies (including when each algorithm fails), every adjustable control and its effect, every metric, experimental results, test coverage, and limitations with proposed solutions.
+
 ## Run locally
 
 Requires Python 3.10 or newer and Node.js 18 or newer. The first install and the OpenStreetMap tiles need internet access. No API key is required.
@@ -64,7 +68,9 @@ The UI tests cover the metric table helpers (formatting, hover tips, and which v
 ```bash
 cd frontend
 npm test
-``` The sweep behind `ANALYSIS.md` is:
+```
+
+The experiment sweep behind the results in `REPORT.html` is:
 
 ```powershell
 # Windows

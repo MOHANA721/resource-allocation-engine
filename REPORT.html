@@ -1,0 +1,548 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Resource Allocation Engine — Technical Report</title>
+<style>
+  :root {
+    --ink: #1c1917; --muted: #57534e; --line: #e7e5e4; --paper: #fff; --bg: #f5f5f4;
+    --green: #166534; --green-bg: #ecfdf5; --red: #b91c1c; --red-bg: #fef2f2;
+    --amber: #92400e; --amber-bg: #fffbeb; --blue: #1e40af; --blue-bg: #eff6ff;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--ink); font: 16px/1.6 "Segoe UI", system-ui, -apple-system, sans-serif; }
+  .wrap { max-width: 1000px; margin: 0 auto; padding: 36px 22px 80px; }
+  header { border-bottom: 3px solid var(--ink); padding-bottom: 18px; margin-bottom: 8px; }
+  header h1 { font-size: 30px; margin: 0 0 4px; line-height: 1.2; }
+  header .sub { color: var(--muted); margin: 0; }
+  header dl { display: grid; grid-template-columns: max-content 1fr; gap: 2px 14px; margin: 14px 0 0; font-size: 14px; }
+  header dt { color: var(--muted); }
+  header dd { margin: 0; }
+  nav { background: var(--paper); border: 1px solid var(--line); border-radius: 10px; padding: 14px 18px; margin: 22px 0; }
+  nav strong { display: block; margin-bottom: 6px; }
+  nav ol { margin: 0; padding-left: 22px; columns: 2; column-gap: 32px; }
+  nav li { margin-bottom: 2px; }
+  nav a { color: var(--blue); text-decoration: none; }
+  section { background: var(--paper); border: 1px solid var(--line); border-radius: 10px; padding: 22px 26px; margin: 16px 0; }
+  h2 { margin: 0 0 12px; font-size: 22px; }
+  h3 { margin: 22px 0 8px; font-size: 17px; }
+  h4 { margin: 16px 0 6px; font-size: 15px; }
+  p { margin: 0 0 12px; }
+  ul, ol { margin: 0 0 12px; padding-left: 22px; }
+  li { margin-bottom: 5px; }
+  code { background: #f5f5f4; padding: 1px 6px; border-radius: 4px; font-family: Consolas, "Cascadia Mono", monospace; font-size: 14px; }
+  pre { background: var(--ink); color: #fafaf9; padding: 14px 16px; border-radius: 8px; overflow-x: auto; font: 14px/1.5 Consolas, "Cascadia Mono", monospace; margin: 0 0 14px; }
+  table { width: 100%; border-collapse: collapse; margin: 6px 0 16px; font-size: 14.5px; }
+  th, td { border-bottom: 1px solid var(--line); padding: 7px 10px; text-align: left; vertical-align: top; }
+  th { background: #fafaf9; font-weight: 600; }
+  .num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+  .win { background: var(--green-bg); color: var(--green); font-weight: 600; }
+  .lose { background: var(--red-bg); color: var(--red); font-weight: 600; }
+  .muted { color: #a8a29e; }
+  .note { border-left: 4px solid var(--blue); background: var(--blue-bg); padding: 11px 15px; border-radius: 0 8px 8px 0; margin: 14px 0; }
+  .note.warn { border-color: #d97706; background: var(--amber-bg); }
+  .note.good { border-color: var(--green); background: var(--green-bg); }
+  .note.bad { border-color: var(--red); background: var(--red-bg); }
+  .note p:last-child { margin-bottom: 0; }
+  .case { border: 1px solid var(--line); border-radius: 8px; padding: 14px 18px; margin: 14px 0; background: #fcfcfb; }
+  .case h3 { margin-top: 0; }
+  .case .lbl { display: inline-block; font-size: 12px; font-weight: 600; letter-spacing: .03em; text-transform: uppercase; color: var(--muted); margin-right: 6px; }
+  .flow { display: grid; grid-template-columns: repeat(5, 1fr); gap: 10px; margin: 14px 0; }
+  .flow div { background: #fafaf9; border: 1px solid var(--line); border-radius: 8px; padding: 11px; font-size: 14px; position: relative; }
+  .flow b { display: block; margin-bottom: 3px; }
+  .flow div:not(:last-child)::after { content: "→"; position: absolute; right: -13px; top: 40%; color: var(--muted); font-weight: 700; }
+  .grid3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; }
+  .card { border: 1px solid var(--line); border-radius: 8px; padding: 13px 15px; background: #fafaf9; font-size: 14.5px; }
+  .card h4 { margin: 0 0 6px; }
+  .card p { margin-bottom: 8px; }
+  svg text { font-family: "Segoe UI", system-ui, sans-serif; }
+  footer { color: var(--muted); font-size: 13px; text-align: center; margin-top: 28px; }
+  @media (max-width: 780px) { .flow, .grid3 { grid-template-columns: 1fr; } .flow div::after { display: none; } nav ol { columns: 1; } }
+  @media print { body { background: #fff; } section, nav { border: 0; padding: 0 0 8px; } .wrap { padding: 0; } }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<header>
+  <h1>Resource Allocation Engine</h1>
+  <p class="sub">Technical report: design, algorithm comparison, controls, metrics, and limitations</p>
+  <dl>
+    <dt>Domain</dt><dd>Field service: assigning technicians to household repair requests in Bengaluru</dd>
+    <dt>Algorithms</dt><dd>Greedy (baseline), Hungarian (optimal reference), Regret (custom heuristic)</dd>
+    <dt>Stack</dt><dd>FastAPI, NumPy, SciPy (backend); React, Vite, react-leaflet with OpenStreetMap (frontend)</dd>
+    <dt>Repository</dt><dd>github.com/MOHANA721/resource-allocation-engine</dd>
+    <dt>Author</dt><dd>Mohana Mondal</dd>
+  </dl>
+</header>
+
+<nav>
+  <strong>Contents</strong>
+  <ol>
+    <li><a href="#summary">Summary of findings</a></li>
+    <li><a href="#problem">Problem and scope</a></li>
+    <li><a href="#data">Data model</a></li>
+    <li><a href="#flow">System architecture and flow</a></li>
+    <li><a href="#rules">Hard constraints</a></li>
+    <li><a href="#cost">Soft constraints and the cost function</a></li>
+    <li><a href="#algos">Algorithms</a></li>
+    <li><a href="#cases">Case studies</a></li>
+    <li><a href="#knobs">Adjustable controls and their significance</a></li>
+    <li><a href="#metrics">Metrics</a></li>
+    <li><a href="#results">Experimental results</a></li>
+    <li><a href="#verdict">Conclusions: which algorithm wins, and why</a></li>
+    <li><a href="#realtime">Real-time requests</a></li>
+    <li><a href="#tests">Test suite</a></li>
+    <li><a href="#ui">Using the application</a></li>
+    <li><a href="#limits">Assumptions, limitations, and proposed solutions</a></li>
+  </ol>
+</nav>
+
+<!-- 1 -->
+<section id="summary">
+  <h2>1. Summary of findings</h2>
+  <ul>
+    <li><b>All three algorithms share one rule set and one cost function.</b> Differences in results therefore come only from how each algorithm searches, which makes the comparison fair.</li>
+    <li><b>Hungarian always achieves the lowest total cost.</b> This is verified against an exhaustive brute-force search on 30 small scenarios at two weight settings, and against the other two algorithms on 60 larger ones.</li>
+    <li><b>Greedy is on average 2.6% to 15.9% above optimal</b> on random scenarios, depending on demand and skill scarcity. Its loss is largest when technicians have several skills and demand is moderate to heavy, because it spends flexible technicians early.</li>
+    <li><b>Regret is within 0.02% of optimal when capacity is plentiful</b> and fixes the case where greedy strands a specialist. It is the weakest of the three when demand exceeds capacity (25.4% above optimal at 32 requests for 10 technicians), because it ranks requests by how few options they have rather than by priority.</li>
+    <li><b>Shorter urgent travel is not a better plan.</b> Greedy consistently sends technicians a shorter distance to urgent jobs, yet loses on total cost, because those short trips take technicians that other jobs needed.</li>
+    <li><b>The weights define what "best" means.</b> If leaving a job open is priced too cheaply, the optimal plan drops urgent customers. The weights should be set from business policy before the algorithms are compared.</li>
+  </ul>
+</section>
+
+<!-- 2 -->
+<section id="problem">
+  <h2>2. Problem and scope</h2>
+  <p>A service company has a fixed team of technicians, each based in a Bengaluru locality, each with one or two trade skills, a shift, and a maximum number of jobs per day. Households submit repair requests, each requiring one skill within a customer time window, taking a known duration, and carrying a priority from 1 (can wait) to 5 (urgent).</p>
+  <p>The engine decides <b>which technician serves which request</b>, and which requests remain unserved when capacity is insufficient. It solves the problem with three algorithms, reports the same metrics for each, and visualizes the three plans side by side on a map.</p>
+  <p><b>In scope:</b> skills, capacity, time windows, shifts, travel time, priority, workload balance, explanations, metrics, and comparison. <b>Out of scope by design:</b> ordering a technician's jobs into a route (vehicle routing), road networks, and requests that arrive during the day. These are discussed in <a href="#limits">Section 16</a>.</p>
+</section>
+
+<!-- 3 -->
+<section id="data">
+  <h2>3. Data model</h2>
+  <h3>3.1 Technician (resource)</h3>
+  <table>
+    <tr><th>Field</th><th>Example</th><th>Description</th></tr>
+    <tr><td><code>id</code>, <code>name</code>, <code>area</code></td><td>t1, Vikram, Koramangala</td><td>Identity and home locality (one of 12 Bengaluru localities, with a small random offset).</td></tr>
+    <tr><td><code>lat</code>, <code>lng</code></td><td>12.9352, 77.6245</td><td>Home coordinates; the technician starts travelling from here.</td></tr>
+    <tr><td><code>skills</code></td><td>["electrical", "plumbing"]</td><td>One or two of: HVAC (heating, ventilation, and air conditioning), electrical, plumbing, carpentry, appliance.</td></tr>
+    <tr><td><code>shift_start</code>, <code>shift_end</code></td><td>08:00, 16:00</td><td>One of 08:00–16:00, 09:00–17:00, 12:00–20:00.</td></tr>
+    <tr><td><code>max_jobs</code></td><td>3</td><td>Daily capacity: 2, 3, or 4 (1 in the hand-built cases).</td></tr>
+  </table>
+  <h3>3.2 Request</h3>
+  <table>
+    <tr><th>Field</th><th>Example</th><th>Description</th></tr>
+    <tr><td><code>id</code>, <code>customer</code>, <code>area</code></td><td>r2, Household 2, Rajajinagar</td><td>Identity and locality.</td></tr>
+    <tr><td><code>lat</code>, <code>lng</code></td><td>13.0001, 77.5585</td><td>Job location.</td></tr>
+    <tr><td><code>required_skill</code></td><td>plumbing</td><td>Drawn only from skills the generated workforce has; HVAC and plumbing are three times as frequent as the others.</td></tr>
+    <tr><td><code>window_start</code>, <code>window_end</code></td><td>09:00, 12:00</td><td>The customer is available in this window; the technician must arrive before it closes.</td></tr>
+    <tr><td><code>duration</code></td><td>60</td><td>Minutes of work: 60, 90, or 120.</td></tr>
+    <tr><td><code>priority</code></td><td>5</td><td>1 to 5. Scales the penalty for leaving the request unserved.</td></tr>
+  </table>
+  <h3>3.3 Assignment and result</h3>
+  <p>For each request, each algorithm returns an assignment containing the technician (or none), the distance, the cost charged, and a plain-language explanation. Each algorithm also returns a set of metrics (<a href="#metrics">Section 10</a>). Requests whose skill no technician has are returned separately as <b>skill gaps</b>.</p>
+</section>
+
+<!-- 4 -->
+<section id="flow">
+  <h2>4. System architecture and flow</h2>
+  <div class="flow">
+    <div><b>1. Configure</b>The user sets headcount, demand, scarcity, and seed in the UI.</div>
+    <div><b>2. Generate</b><code>POST /api/scenario</code> builds the workforce first, then requests drawn from that workforce's skills.</div>
+    <div><b>3. Allocate</b><code>POST /api/allocate</code> receives the scenario and the three cost weights.</div>
+    <div><b>4. Solve</b>Skill gaps are separated; greedy, Hungarian, and regret solve the same remaining requests.</div>
+    <div><b>5. Present</b>The UI shows the metrics table, three maps, and per-request explanations.</div>
+  </div>
+  <h3>4.1 API</h3>
+  <table>
+    <tr><th>Endpoint</th><th>Input</th><th>Output</th></tr>
+    <tr><td><code>GET /api/health</code></td><td>—</td><td>Liveness check.</td></tr>
+    <tr><td><code>POST /api/scenario</code></td><td><code>n_techs</code> (1–40), <code>n_requests</code> (0–80), <code>seed</code>, <code>scarcity</code> (0–1)</td><td>Technicians and requests.</td></tr>
+    <tr><td><code>GET /api/scenario/trap</code></td><td>—</td><td>The hand-built case in Section 8.1.</td></tr>
+    <tr><td><code>POST /api/allocate</code></td><td>Technicians, requests, weights</td><td>Skill gaps, and assignments plus metrics for each algorithm.</td></tr>
+  </table>
+  <h3>4.2 Design decisions</h3>
+  <ul>
+    <li><b>Reproducibility.</b> All randomness uses <code>random.Random(seed)</code>; identical settings always produce an identical scenario.</li>
+    <li><b>Fixed workforce.</b> Technicians are generated first and never altered to fit demand, as in a real company.</li>
+    <li><b>Honest metrics.</b> A request needing a skill nobody has is reported as a skill gap and excluded from every algorithm's score, so "unserved" always reflects an algorithm's decision rather than impossible data.</li>
+    <li><b>Fair comparison.</b> One API call runs all three algorithms on the identical input with the identical rules and cost.</li>
+  </ul>
+  <h3>4.3 Code layout</h3>
+  <table>
+    <tr><th>File</th><th>Responsibility</th></tr>
+    <tr><td><code>backend/app/models.py</code></td><td>Pydantic models and input validation.</td></tr>
+    <tr><td><code>backend/app/generator.py</code></td><td>Seeded scenario generator and the trap scenario.</td></tr>
+    <tr><td><code>backend/app/constraints.py</code></td><td>Distance, travel time, hard-constraint check, cost and penalty.</td></tr>
+    <tr><td><code>backend/app/allocate.py</code></td><td>Skill gaps, the three algorithms, explanations, metrics.</td></tr>
+    <tr><td><code>backend/app/main.py</code></td><td>FastAPI routes and CORS.</td></tr>
+    <tr><td><code>backend/experiments.py</code></td><td>Parameter sweeps behind Section 11.</td></tr>
+    <tr><td><code>frontend/src/App.jsx</code>, <code>metrics.js</code></td><td>UI, maps, controls, metric table helpers.</td></tr>
+  </table>
+</section>
+
+<!-- 5 -->
+<section id="rules">
+  <h2>5. Hard constraints</h2>
+  <p>A technician may serve a request only if all four conditions hold. A pair that fails any condition is never considered by any algorithm.</p>
+  <table>
+    <tr><th>#</th><th>Constraint</th><th>Rule</th></tr>
+    <tr><td>1</td><td>Skill</td><td>The request's skill is in the technician's skill list.</td></tr>
+    <tr><td>2</td><td>Capacity</td><td>The technician holds fewer jobs than <code>max_jobs</code>.</td></tr>
+    <tr><td>3</td><td>Arrival</td><td>Leaving home at shift start and travelling straight-line distance at 40 km/h, the technician arrives no later than <code>window_end</code>.</td></tr>
+    <tr><td>4</td><td>Shift end</td><td>Work starts at the later of arrival and <code>window_start</code>, and finishes no later than <code>shift_end</code>.</td></tr>
+  </table>
+  <h3>5.1 Worked cases</h3>
+  <table>
+    <tr><th>Case</th><th>Data</th><th>Calculation</th><th>Result</th></tr>
+    <tr><td>Feasible, with waiting</td><td>Shift 08:00–17:00; 20 km; window 09:00–12:00; 120 min</td><td>Arrive 08:30, wait, start 09:00, finish 11:00</td><td class="win">Allowed</td></tr>
+    <tr><td>Window closes first</td><td>Same, window closes 08:20</td><td>Arrives 08:30, after the window has closed</td><td class="lose">Rejected (arrival)</td></tr>
+    <tr><td>Runs past shift</td><td>Shift 08:00–10:00; 1 km; window 09:00–12:00; 120 min</td><td>Start 09:00, finish 11:00, after 10:00</td><td class="lose">Rejected (shift end)</td></tr>
+    <tr><td>Wrong skill</td><td>Plumbing-only technician; electrical request 4.9 km away</td><td>Distance is irrelevant</td><td class="lose">Rejected (skill)</td></tr>
+    <tr><td>Full</td><td><code>max_jobs</code> 1, already holding one job</td><td>—</td><td class="lose">Rejected (capacity)</td></tr>
+  </table>
+  <p>When a request remains unserved, its explanation names the reason, for example: <i>"no technician with plumbing can arrive before the window closes and finish inside his shift."</i></p>
+</section>
+
+<!-- 6 -->
+<section id="cost">
+  <h2>6. Soft constraints and the cost function</h2>
+  <p>Among feasible options, the algorithms prefer lower cost. Three soft constraints are combined into one number:</p>
+  <pre>assignment cost   = w_distance × km  +  w_balance × (jobs the technician already holds)
+unserved penalty  = w_unassigned × priority
+total cost        = Σ assignment costs  +  Σ unserved penalties</pre>
+  <p>Defaults: <code>w_distance = 1</code>, <code>w_balance = 2</code>, <code>w_unassigned = 30</code>.</p>
+  <table>
+    <tr><th>Situation (defaults)</th><th>Calculation</th><th class="num">Cost</th></tr>
+    <tr><td>Technician with no jobs yet, 7.5 km away</td><td>1 × 7.5 + 2 × 0</td><td class="num">7.5</td></tr>
+    <tr><td>Same technician, second job</td><td>1 × 7.5 + 2 × 1</td><td class="num">9.5</td></tr>
+    <tr><td>Same technician, third job</td><td>1 × 7.5 + 2 × 2</td><td class="num">11.5</td></tr>
+    <tr><td>Priority-5 request left unserved</td><td>30 × 5</td><td class="num">150</td></tr>
+    <tr><td>Priority-1 request left unserved</td><td>30 × 1</td><td class="num">30</td></tr>
+  </table>
+  <ul>
+    <li><b>Distance</b> represents travel time and fuel.</li>
+    <li><b>Balance</b> discourages the nearest technician from absorbing every nearby job while others are idle.</li>
+    <li><b>Unserved penalty</b> gives a price to disappointing a customer, scaled by urgency. Without it, serving nobody would cost zero.</li>
+  </ul>
+</section>
+
+<!-- 7 -->
+<section id="algos">
+  <h2>7. Algorithms</h2>
+  <div class="grid3">
+    <div class="card">
+      <h4>7.1 Greedy (baseline)</h4>
+      <p><b>Method.</b> Sort requests by priority (highest first), then earliest window close, then id. For each request in turn, assign the cheapest feasible technician with capacity. Decisions are never revisited.</p>
+      <p><b>Complexity.</b> About O(requests × technicians).</p>
+      <p><b>Explanation given.</b> "Cheapest of N feasible technicians; runner-up X."</p>
+    </div>
+    <div class="card">
+      <h4>7.2 Hungarian (optimal reference)</h4>
+      <p><b>Method.</b> Build a cost matrix of requests × technician slots plus one "unserved" column per request, and solve it with <code>scipy.optimize.linear_sum_assignment</code>.</p>
+      <p><b>Complexity.</b> O(n³) on the matrix size; a few milliseconds here.</p>
+      <p><b>Explanation given.</b> "Chosen in the minimum-cost matching; X is closer and is kept for another request."</p>
+    </div>
+    <div class="card">
+      <h4>7.3 Regret (custom heuristic)</h4>
+      <p><b>Method.</b> For each open request, regret = cost of second-best option − cost of best. Serve the request with the largest regret first; a request with one option has infinite regret. Ties go to higher priority, then earlier window close. Repeat.</p>
+      <p><b>Complexity.</b> About O(requests² × technicians).</p>
+      <p><b>Explanation given.</b> "Chosen early because this request had the largest regret."</p>
+    </div>
+  </div>
+  <h3>7.4 How Hungarian handles multi-job capacity and unserved requests</h3>
+  <p>The Hungarian method assigns one row to one column. Two extensions adapt it to this problem:</p>
+  <ul>
+    <li><b>Slots.</b> A technician with <code>max_jobs = 3</code> becomes three columns. Slot <i>k</i> costs distance + <code>w_balance</code> × <i>k</i>, so the solver fills a technician's cheaper slots first and the total balance charge equals that of the other algorithms.</li>
+    <li><b>Unserved columns.</b> Each request has its own column priced at <code>w_unassigned</code> × priority, allowing the solver to leave a request unserved when serving it would cost more.</li>
+    <li><b>Infeasible cells</b> (wrong skill, late arrival, shift overrun, or another request's unserved column) receive a blocking cost of the largest real cost plus 1000, so they are never preferred to leaving the request unserved.</li>
+  </ul>
+  <p>Matrix for the case in Section 8.1:</p>
+  <table>
+    <tr><th>Request</th><th class="num">Vikram slot 0</th><th class="num">Arjun slot 0</th><th class="num">Leak unserved</th><th class="num">Panel unserved</th></tr>
+    <tr><td>Leak (plumbing, P5)</td><td class="num">0.26</td><td class="num win">4.63</td><td class="num">150</td><td class="num muted">1150 blocked</td></tr>
+    <tr><td>Panel (electrical, P5)</td><td class="num win">1.65</td><td class="num muted">1150 blocked</td><td class="num muted">1150 blocked</td><td class="num">150</td></tr>
+  </table>
+  <p>The minimum selection (highlighted) is 4.63 + 1.65 = 6.27. The greedy plan, 0.26 + 150 = 150.26, is also present in the matrix and is rejected as more expensive.</p>
+</section>
+
+<!-- 8 -->
+<section id="cases">
+  <h2>8. Case studies</h2>
+  <p>Each case is small enough to verify by hand. All figures are produced by the engine and most are asserted in the test suite.</p>
+
+  <div class="case">
+    <h3>8.1 Greedy strands a specialist (the "trap" scenario)</h3>
+    <p><span class="lbl">Setup</span>Vikram (Koramangala) has electrical and plumbing; Arjun (Jayanagar) has plumbing only; each can take one job. A plumbing leak near Vikram closes at 12:00; an electrical panel that only Vikram can serve closes at 16:00. Both are priority 5. Default weights.</p>
+    <svg viewBox="0 0 640 230" width="100%" role="img" aria-label="Trap layout">
+      <rect x="0" y="0" width="640" height="230" rx="8" fill="#fafaf9" stroke="#e7e5e4"/>
+      <line x1="470" y1="140" x2="490" y2="130" stroke="#0f766e" stroke-width="3" stroke-dasharray="6 4"/>
+      <line x1="470" y1="140" x2="470" y2="55" stroke="#0f766e" stroke-width="3" stroke-dasharray="6 4"/>
+      <line x1="120" y1="150" x2="490" y2="130" stroke="#b45309" stroke-width="3" stroke-dasharray="6 4"/>
+      <circle cx="470" cy="140" r="13" fill="#0f766e"/>
+      <text x="440" y="174" font-size="14" font-weight="600">Vikram</text>
+      <text x="395" y="192" font-size="12" fill="#57534e">electrical + plumbing · 1 job</text>
+      <circle cx="120" cy="150" r="13" fill="#b45309"/>
+      <text x="97" y="184" font-size="14" font-weight="600">Arjun</text>
+      <text x="70" y="202" font-size="12" fill="#57534e">plumbing only · 1 job</text>
+      <circle cx="490" cy="130" r="9" fill="#86efac" stroke="#166534" stroke-width="2"/>
+      <text x="505" y="122" font-size="13" font-weight="600">Leak</text>
+      <text x="505" y="138" font-size="11" fill="#57534e">plumbing · P5 · closes 12:00</text>
+      <circle cx="470" cy="55" r="9" fill="#86efac" stroke="#166534" stroke-width="2"/>
+      <text x="485" y="48" font-size="13" font-weight="600">Panel</text>
+      <text x="485" y="64" font-size="11" fill="#57534e">electrical · P5 · closes 16:00</text>
+      <text x="480" y="100" font-size="11" fill="#0f766e">1.65 km</text>
+      <text x="478" y="157" font-size="11" fill="#0f766e">0.26 km</text>
+      <text x="270" y="133" font-size="11" fill="#b45309">4.63 km</text>
+      <text x="16" y="24" font-size="12" fill="#57534e">Schematic, not to scale.</text>
+    </svg>
+    <p><span class="lbl">Greedy</span>Both are priority 5; the leak closes first, so it is processed first and takes its cheapest option, Vikram (0.26). The panel then has no feasible technician and is left unserved (150).</p>
+    <p><span class="lbl">Regret</span>Leak regret = 4.63 − 0.26 = 4.37; panel has one option, so regret is infinite. The panel is served first by Vikram (1.65), then the leak by Arjun (4.63).</p>
+    <p><span class="lbl">Hungarian</span>Selects the cheaper whole plan directly from the matrix in Section 7.4.</p>
+    <table>
+      <tr><th>Algorithm</th><th>Leak</th><th>Panel</th><th class="num">Total cost</th><th class="num">Urgent misses</th><th class="num">Gap</th></tr>
+      <tr class="lose"><td>Greedy</td><td>Vikram</td><td>unserved</td><td class="num">150.26</td><td class="num">1</td><td class="num">143.99</td></tr>
+      <tr class="win"><td>Hungarian</td><td>Arjun</td><td>Vikram</td><td class="num">6.27</td><td class="num">0</td><td class="num">0</td></tr>
+      <tr class="win"><td>Regret</td><td>Arjun</td><td>Vikram</td><td class="num">6.27</td><td class="num">0</td><td class="num">0</td></tr>
+    </table>
+    <p><span class="lbl">Lesson</span>Greedy used the flexible technician on the job that had a backup. Greedy's urgent travel (0.26 km) is far shorter than the others' (6.27 km), but only because an urgent job was never visited.</p>
+  </div>
+
+  <div class="case">
+    <h3>8.2 Greedy loses a small amount through order alone</h3>
+    <p><span class="lbl">Setup</span>Rahul and Karan, both plumbers with capacity 2, about 1 km apart. Two equal-priority jobs, r1 and r2, both about 0.11 km from Rahul. Karan is 0.98 km from r1 and 1.09 km from r2. Default weights.</p>
+    <p><span class="lbl">Greedy</span>Takes r1 first: Rahul (0.11). For r2, Rahul now costs 0.11 + 2 = 2.11, so Karan (1.09) is chosen. Total 1.20.</p>
+    <p><span class="lbl">Hungarian and Regret</span>Send Karan to r1 (0.98) and Rahul to r2 (0.11). Total 1.09.</p>
+    <p><span class="lbl">Lesson</span>Even with no scarcity, processing order matters: the job served second absorbed the more expensive option. If the balance weight is set to 0, all three let Rahul take both jobs (total 0.22).</p>
+  </div>
+
+  <div class="case">
+    <h3>8.3 All algorithms tie when resources are plentiful</h3>
+    <p><span class="lbl">Setup</span>A plumber next to a plumbing job and an HVAC technician next to an HVAC job, each with spare capacity.</p>
+    <p><span class="lbl">Result</span>All three produce the same plan at a total cost of 0.17. When every request has an obvious, uncontested best technician, the extra search in Hungarian and regret brings no benefit.</p>
+  </div>
+
+  <div class="case">
+    <h3>8.4 Regret fails when demand exceeds capacity</h3>
+    <p><span class="lbl">Setup</span>Vikram (electrical + plumbing) and Arjun (plumbing), one job each. Three requests: an electrical switch (priority <b>1</b>, only Vikram), a leak (priority 5), and a burst pipe (priority 5); both technicians can serve either plumbing job. One request must be left unserved.</p>
+    <p><span class="lbl">Regret</span>The switch has one option, so its regret is infinite and it takes Vikram first. The two priority-5 jobs then share Arjun; the leak wins the tie on window close, and the burst pipe is left unserved.</p>
+    <p><span class="lbl">Greedy and Hungarian</span>Serve both priority-5 jobs and leave the priority-1 switch unserved.</p>
+    <table>
+      <tr><th>Algorithm</th><th>Switch (P1)</th><th>Leak (P5)</th><th>Burst (P5)</th><th class="num">Total cost</th><th class="num">Urgent misses</th></tr>
+      <tr class="win"><td>Greedy</td><td>unserved</td><td>Vikram</td><td>Arjun</td><td class="num">33.35</td><td class="num">0</td></tr>
+      <tr class="win"><td>Hungarian</td><td>unserved</td><td>Vikram</td><td>Arjun</td><td class="num">33.35</td><td class="num">0</td></tr>
+      <tr class="lose"><td>Regret</td><td>Vikram</td><td>Arjun</td><td>unserved</td><td class="num">153.65</td><td class="num">1</td></tr>
+    </table>
+    <p><span class="lbl">Lesson</span>Regret measures how much a request loses by missing its best technician, not whether the request is important enough to serve. Under overload, a low-priority request with a single option can displace an urgent one.</p>
+  </div>
+
+  <div class="case">
+    <h3>8.5 Weights that undervalue unserved requests</h3>
+    <p><span class="lbl">Setup</span>The trap scenario (8.1) with <code>w_distance = 5</code>, <code>w_balance = 2</code>, <code>w_unassigned = 5</code>. Leaving a priority-5 request unserved now costs only 25.</p>
+    <table>
+      <tr><th>Algorithm</th><th>Leak</th><th>Panel</th><th class="num">Total cost</th><th class="num">Served</th><th class="num">Urgent misses</th></tr>
+      <tr class="win"><td>Greedy</td><td>Vikram</td><td>unserved</td><td class="num">26.29</td><td class="num">1 of 2</td><td class="num">1</td></tr>
+      <tr class="win"><td>Hungarian</td><td>Vikram</td><td>unserved</td><td class="num">26.29</td><td class="num">1 of 2</td><td class="num">1</td></tr>
+      <tr><td>Regret</td><td>Arjun</td><td>Vikram</td><td class="num">31.35</td><td class="num">2 of 2</td><td class="num">0</td></tr>
+    </table>
+    <p><span class="lbl">Explanation shown</span><i>"Unserved Household panel: left open in the minimum-cost plan. Leaving it open costs 25.0, which is less than rearranging technicians to serve it."</i></p>
+    <p><span class="lbl">Lesson</span>Hungarian remains optimal for the stated objective, but the objective now values about 5 km of driving above an urgent customer. Regret serves both only because it never chooses to leave a feasible request unserved. The remedy is to correct the weight, not to change the algorithm.</p>
+  </div>
+
+  <div class="case">
+    <h3>8.6 Skill gap</h3>
+    <p><span class="lbl">Setup</span>An HVAC request is added to a workforce with no HVAC technician.</p>
+    <p><span class="lbl">Result</span>The request is listed separately: <i>"Skill gap: nobody on this workforce has hvac."</i> It is excluded from all three algorithms' metrics; their results on the remaining requests are unchanged. A skill gap is a hiring problem, not an algorithm failure.</p>
+  </div>
+
+  <div class="case">
+    <h3>8.7 Priority decides what is dropped under scarcity</h3>
+    <p><span class="lbl">Setup</span>One plumber with capacity 1; a priority-5 and a priority-1 plumbing request, both reachable.</p>
+    <p><span class="lbl">Result</span>All three algorithms serve the priority-5 request and leave the priority-1 request unserved (penalty 30 rather than 150).</p>
+  </div>
+</section>
+
+<!-- 9 -->
+<section id="knobs">
+  <h2>9. Adjustable controls and their significance</h2>
+  <h3>9.1 Scenario controls</h3>
+  <p>Changing any of these builds a new scenario.</p>
+  <table>
+    <tr><th>Control</th><th>Range (default)</th><th>Effect</th><th>Significance</th></tr>
+    <tr><td>Technicians</td><td>1–40 (12)</td><td>Workforce size.</td><td>Supply. Fewer technicians means more contention and more unserved requests.</td></tr>
+    <tr><td>Requests</td><td>0–80 (20)</td><td>Number of requests.</td><td>Demand. The ratio of requests to total capacity drives how much the algorithms differ (Section 11.1).</td></tr>
+    <tr><td>Scarcity</td><td>0–1 (0.40)</td><td>Probability that a technician has one skill instead of two.</td><td>Flexibility. Low scarcity gives Hungarian more choices to rearrange; high scarcity leaves most requests with one option (Section 11.2).</td></tr>
+    <tr><td>Seed</td><td>any integer (1)</td><td>Random seed.</td><td>Reproducibility. The same seed and settings always rebuild the same scenario.</td></tr>
+    <tr><td>Load trap scenario</td><td>button</td><td>Loads the case in Section 8.1.</td><td>Demonstrates greedy's characteristic failure.</td></tr>
+  </table>
+  <h3>9.2 Cost weights</h3>
+  <p>Changing these reruns all three algorithms on the same scenario.</p>
+  <table>
+    <tr><th>Weight</th><th>Range (default)</th><th>Raising it</th><th>Lowering it</th></tr>
+    <tr><td>Distance</td><td>0–5 (1)</td><td>Nearer technicians are preferred; distant low-priority requests become more likely to be left unserved (by Hungarian).</td><td>Travel becomes cheap; longer trips are accepted to serve more requests.</td></tr>
+    <tr><td>Balance</td><td>0–10 (2)</td><td>Work is spread across technicians; busy technicians are passed over.</td><td>The nearest technician takes jobs up to his capacity.</td></tr>
+    <tr><td>Unassigned</td><td>0–80 (30)</td><td>Leaving a request unserved becomes expensive; Hungarian serves more requests, even far ones.</td><td>Leaving requests unserved becomes cheap; Hungarian drops more, including urgent ones (Section 8.5).</td></tr>
+  </table>
+  <h3>9.3 Which algorithm responds to which weight</h3>
+  <table>
+    <tr><th>Algorithm</th><th>Distance and balance</th><th>Unassigned</th></tr>
+    <tr><td>Greedy</td><td>Only their ratio affects choices; scaling both equally changes nothing.</td><td>Never changes choices; only changes the reported cost.</td></tr>
+    <tr><td>Regret</td><td>Only their ratio affects choices and ordering.</td><td>Never changes choices; only changes the reported cost.</td></tr>
+    <tr><td>Hungarian</td><td>Yes.</td><td><b>Yes.</b> It sets the point at which leaving a request unserved is cheaper than serving it.</td></tr>
+  </table>
+  <p>Greedy and regret serve every request that has a feasible technician, so the unserved penalty never enters their decisions. These properties are asserted in the test suite. Scaling all three weights by the same factor leaves every plan unchanged and scales every total by that factor.</p>
+  <div class="note warn"><p><b>Recommendation.</b> Set the weights from business policy first (for example, "how many kilometres of travel is one unserved priority-5 customer worth?"), then compare algorithms. All three are always scored with the same weights, so the comparison remains fair at any setting.</p></div>
+</section>
+
+<!-- 10 -->
+<section id="metrics">
+  <h2>10. Metrics</h2>
+  <p>Each metric is reported for each algorithm. In the UI the best value in each row is highlighted and every metric has a hover description. <b>Total cost is the only score used to rank algorithms;</b> the others explain the plan.</p>
+  <table>
+    <tr><th>Metric</th><th>Definition</th><th>Importance</th></tr>
+    <tr><td><b>Total cost</b></td><td>Sum of assignment costs and unserved penalties.</td><td>The objective. It combines travel, workload, and service in stated proportions.</td></tr>
+    <tr><td><b>Gap vs Hungarian</b></td><td>Algorithm's total cost minus Hungarian's.</td><td>Cost of not optimizing. Zero means the algorithm matched the optimum.</td></tr>
+    <tr><td>Assigned</td><td>Requests served (skill gaps excluded).</td><td>Customers who receive a visit.</td></tr>
+    <tr><td>Unassigned</td><td>Requests left unserved (skill gaps excluded).</td><td>Customers who do not; read together with which priorities they had.</td></tr>
+    <tr><td>Coverage</td><td>Assigned ÷ servable requests.</td><td>Service level as a percentage, comparable across scenario sizes.</td></tr>
+    <tr><td>Kilometres</td><td>Travel over served requests.</td><td>Fuel and time. An unserved request adds zero, so fewer kilometres can indicate fewer visits.</td></tr>
+    <tr><td>Average km</td><td>Kilometres ÷ served requests.</td><td>Typical trip length.</td></tr>
+    <tr><td>Urgent km</td><td>Travel over served priority-4 and priority-5 requests.</td><td>Responsiveness to urgent customers; must be read with urgent misses.</td></tr>
+    <tr><td>Urgent average km</td><td>Urgent km ÷ served urgent requests.</td><td>Typical urgent response distance.</td></tr>
+    <tr><td>Urgent misses</td><td>Priority-4 and priority-5 requests left unserved.</td><td>The most serious service failure.</td></tr>
+    <tr><td>Workload spread</td><td>Standard deviation of jobs per technician.</td><td>Fairness of workload; lower is more even.</td></tr>
+    <tr><td>Runtime</td><td>Milliseconds taken by the algorithm.</td><td>Relevant only at much larger scale; not part of the score.</td></tr>
+  </table>
+  <div class="note"><p><b>Why total cost, not kilometres or coverage.</b> Kilometres rewards leaving distant requests unserved; coverage ignores which requests were left unserved. Total cost makes the trade-off between them explicit through the weights.</p></div>
+</section>
+
+<!-- 11 -->
+<section id="results">
+  <h2>11. Experimental results</h2>
+  <p>Produced by <code>backend/experiments.py</code>. Each row averages 30 seeded scenarios with 10 technicians and default weights. Gap = (algorithm cost − Hungarian cost) ÷ Hungarian cost.</p>
+  <h3>11.1 Effect of demand (scarcity 0.4)</h3>
+  <table>
+    <tr><th class="num">Requests</th><th class="num">Greedy gap</th><th class="num">Regret gap</th><th class="num">Runtime ms (greedy / Hungarian / regret)</th></tr>
+    <tr><td class="num">8</td><td class="num">6.39%</td><td class="num win">0.02%</td><td class="num">0.2 / 1.2 / 0.8</td></tr>
+    <tr><td class="num">16</td><td class="num">6.40%</td><td class="num win">3.32%</td><td class="num">0.4 / 2.6 / 2.6</td></tr>
+    <tr><td class="num">24</td><td class="num">11.01%</td><td class="num win">9.89%</td><td class="num">0.5 / 3.6 / 4.8</td></tr>
+    <tr><td class="num">32</td><td class="num win">10.70%</td><td class="num lose">25.43%</td><td class="num">0.6 / 4.4 / 7.6</td></tr>
+  </table>
+  <p>With spare capacity, regret is effectively optimal. Greedy's gap peaks around 24 requests, when technicians still have a choice of jobs, and does not continue to rise once demand exceeds capacity. At 32 requests regret is the weakest, for the reason shown in Section 8.4.</p>
+  <h3>11.2 Effect of skill scarcity (20 requests)</h3>
+  <table>
+    <tr><th class="num">Scarcity</th><th class="num">Greedy gap</th><th class="num">Regret gap</th><th class="num">Urgent avg km, greedy</th><th class="num">Urgent avg km, Hungarian</th></tr>
+    <tr><td class="num">0.10</td><td class="num">15.85%</td><td class="num win">11.85%</td><td class="num">5.79</td><td class="num">6.43</td></tr>
+    <tr><td class="num">0.40</td><td class="num">9.63%</td><td class="num win">6.67%</td><td class="num">5.88</td><td class="num">6.44</td></tr>
+    <tr><td class="num">0.80</td><td class="num">6.98%</td><td class="num win">3.69%</td><td class="num">7.75</td><td class="num">8.11</td></tr>
+    <tr><td class="num">0.95</td><td class="num win">2.58%</td><td class="num">5.99%</td><td class="num">7.67</td><td class="num">7.94</td></tr>
+  </table>
+  <p><b>The gap narrows as skills become scarcer.</b> Hungarian's advantage comes from choice; when most requests have only one or two qualified technicians, there is little to rearrange. At scarcity 0.95 nearly every request has infinite regret, so regret's ranking no longer distinguishes requests, and it falls behind greedy.</p>
+  <p><b>Greedy has shorter urgent travel in every row</b> yet a higher total cost. It gives each urgent request its nearest technician first, which can remove a technician that a later request needed.</p>
+  <h3>11.3 A representative scenario</h3>
+  <p>12 technicians, 20 requests, scarcity 0.40, seed 1 (the application default):</p>
+  <table>
+    <tr><th>Metric</th><th class="num">Greedy</th><th class="num">Hungarian</th><th class="num">Regret</th></tr>
+    <tr><td><b>Total cost</b></td><td class="num">192.2</td><td class="num win">166.7</td><td class="num">211.1</td></tr>
+    <tr><td>Assigned / unassigned</td><td class="num">20 / 0</td><td class="num">20 / 0</td><td class="num">19 / 1</td></tr>
+    <tr><td>Kilometres</td><td class="num">154.2</td><td class="num">128.7</td><td class="num">119.1</td></tr>
+    <tr><td>Urgent km</td><td class="num">54.4</td><td class="num">71.8</td><td class="num">80.6</td></tr>
+    <tr><td>Workload spread</td><td class="num">1.43</td><td class="num">1.43</td><td class="num">1.32</td></tr>
+    <tr><td><b>Gap vs Hungarian</b></td><td class="num">25.5</td><td class="num win">0.0</td><td class="num">44.3</td></tr>
+  </table>
+  <p>Hungarian serves every request with 25.5 fewer kilometres than greedy. Regret travels the least but leaves one request unserved; the penalty outweighs the kilometres saved. This illustrates why kilometres alone would identify the wrong winner.</p>
+</section>
+
+<!-- 12 -->
+<section id="verdict">
+  <h2>12. Conclusions: which algorithm wins, and why</h2>
+  <div class="note good"><p><b>Hungarian wins on total cost in every scenario.</b> It solves the full assignment exactly, so no plan satisfying the same constraints has a lower cost under the same weights. It remains fast at the sizes supported: about 1–4 ms for 10 technicians, and under 100 ms for the largest setting (40 technicians, 80 requests), against roughly 10 ms for greedy and 300–400 ms for regret.</p></div>
+  <table>
+    <tr><th></th><th>Greedy</th><th>Hungarian</th><th>Regret</th></tr>
+    <tr><td><b>Matches optimum when</b></td><td>Each request has an obvious technician; almost all technicians are specialists.</td><td>Always.</td><td>Capacity is plentiful.</td></tr>
+    <tr><td><b>Loses most when</b></td><td>Technicians are flexible and demand is moderate to heavy.</td><td>—</td><td>Demand exceeds capacity; almost every request has a single option.</td></tr>
+    <tr><td><b>Characteristic failure</b></td><td>Uses a flexible technician on a job that had a backup (8.1).</td><td>Faithfully optimizes poorly chosen weights (8.5).</td><td>Lets a low-priority single-option request displace an urgent one (8.4).</td></tr>
+    <tr><td><b>Explanation style</b></td><td>Simplest: best technician still free.</td><td>Whole-plan: kept for another request.</td><td>Ordering: most to lose if delayed.</td></tr>
+    <tr><td><b>Best used for</b></td><td>Immediate, one-at-a-time decisions.</td><td>Planning a known batch of requests.</td><td>A fast approximation when spare capacity is expected.</td></tr>
+  </table>
+  <p><b>Recommended use:</b> Hungarian for the planned batch; greedy for decisions that must be made instantly; regret is not recommended as the default because its weakness appears precisely when capacity is short, which is when allocation matters most.</p>
+</section>
+
+<!-- 13 -->
+<section id="realtime">
+  <h2>13. Real-time requests</h2>
+  <p>The application solves a known batch. For requests arriving during the day:</p>
+  <ul>
+    <li><b>Greedy</b> is naturally online: each arriving request can be assigned instantly to the cheapest feasible technician with capacity.</li>
+    <li><b>Hungarian</b> needs several pending requests to add value; with one request it reduces to greedy. It is used by re-solving periodically over all not-yet-started jobs (a rolling horizon).</li>
+    <li><b>Regret</b> needs at least two pending requests to compare and is likewise a batch method.</li>
+  </ul>
+  <p>A practical design combines them: greedy gives the customer an immediate confirmation, and Hungarian re-optimizes unstarted jobs every few minutes, with jobs in progress fixed and a small penalty for reassigning a technician to limit disruption.</p>
+</section>
+
+<!-- 14 -->
+<section id="tests">
+  <h2>14. Test suite</h2>
+  <p>40 automated tests: 31 backend (<code>pytest</code>) and 9 frontend (<code>npm test</code>, Vitest). All pass from a fresh copy of the repository.</p>
+  <table>
+    <tr><th>Area</th><th>What is verified</th></tr>
+    <tr><td>Optimality</td><td>Hungarian equals an exhaustive brute-force search on 30 small scenarios at two weight settings; it is never worse than greedy or regret on 60 larger scenarios; strictly better on the trap.</td></tr>
+    <tr><td>Hard constraints</td><td>Across 25 seeds, every assignment satisfies skill, capacity, arrival, and shift end; every request is accounted for once. Shift-end, early-arrival, capacity, skill, and 40 km/h cases tested individually.</td></tr>
+    <tr><td>Case studies</td><td>The trap (8.1), the tie (8.3), priority-based dropping (8.7), and skill gaps alone and mixed into a scenario (8.6).</td></tr>
+    <tr><td>Weights</td><td>The 5 / 2 / 5 setting changes only Hungarian's plan; the unassigned weight never changes greedy's or regret's choices; scaling all weights preserves every plan; the balance weight spreads jobs in all three; Hungarian fills cheaper slots first.</td></tr>
+    <tr><td>Metrics</td><td>Kilometres, averages, coverage, workload spread, urgent kilometres, and gap match hand calculations on the trap.</td></tr>
+    <tr><td>Explanations</td><td>Each algorithm's explanation text names the correct reason and runner-up.</td></tr>
+    <tr><td>Generator</td><td>Same seed gives an identical scenario; across 100 seeds at extreme scarcity, requests only require skills the workforce has; empty request list handled.</td></tr>
+    <tr><td>Repeatability and scale</td><td>Identical results on repeated runs; 40 technicians and 80 requests complete within limits and remain valid.</td></tr>
+    <tr><td>API</td><td>All endpoints end to end; invalid inputs (0 or 41 technicians, 81 requests, scarcity 1.5, priority 6, no skills, negative weight) rejected with HTTP 422.</td></tr>
+    <tr><td>Frontend</td><td>Every metric column has a label, direction, hover description, and API field; formatting; best-value highlighting; skill labels.</td></tr>
+  </table>
+</section>
+
+<!-- 15 -->
+<section id="ui">
+  <h2>15. Using the application</h2>
+  <p>Setup commands for Windows, macOS, and Linux are in <code>README.md</code>. In short: start the API with <code>uvicorn app.main:app --port 8000</code> (with <code>PYTHONPATH=backend</code>), start the UI with <code>npm install</code> and <code>npm run dev</code> in <code>frontend</code>, and open <code>http://localhost:5173</code>.</p>
+  <ol>
+    <li><b>Reference cards</b> at the top list the skills, request attributes, and the role of each control.</li>
+    <li><b>Controls</b> (Section 9): scenario controls build a new scenario; weight sliders rerun the current one; <i>Load trap scenario</i> loads Section 8.1.</li>
+    <li><b>Metrics table</b>: one column per algorithm; best value per row highlighted; hover for definitions.</li>
+    <li><b>"Who fails here" panel</b>: a live summary of each algorithm's cost, urgent misses, and gap on the current scenario.</li>
+    <li><b>Three maps</b>: large dots are technicians, with their colour reused on their assignment lines; request dots grow with priority; filled green is served, hollow red is unserved, amber is a skill gap.</li>
+    <li><b>Explanations</b>: selecting a request on a map or in the request list shows each algorithm's reason beneath its map.</li>
+  </ol>
+</section>
+
+<!-- 16 -->
+<section id="limits">
+  <h2>16. Assumptions, limitations, and proposed solutions</h2>
+  <h3>16.1 Assumptions</h3>
+  <ul>
+    <li>All requests for the planning period are known before planning starts.</li>
+    <li>Technicians start from home at shift start; travel is straight-line at a constant 40 km/h.</li>
+    <li>A technician is equally capable in each of his skills.</li>
+    <li>Data are synthetic but realistic: real Bengaluru localities, mixed shifts, skewed skill demand.</li>
+  </ul>
+  <h3>16.2 Limitations and solutions</h3>
+  <table>
+    <tr><th>Limitation</th><th>Impact</th><th>Proposed solution</th></tr>
+    <tr><td>Jobs are not sequenced into routes; each job is priced and time-checked from home.</td><td>A technician's jobs may overlap in time; later jobs' travel is misestimated.</td><td>Add a routing stage: an insertion heuristic for each technician's jobs, or a vehicle-routing solver such as OR-Tools with time windows.</td></tr>
+    <tr><td>Straight-line distance at constant speed.</td><td>Underestimates real travel, especially across Bengaluru traffic.</td><td>Use a road-distance matrix from a locally hosted OSRM server (free, no API key), with time-of-day speed factors.</td></tr>
+    <tr><td>Batch planning only.</td><td>Requests arriving during the day are not handled.</td><td>Rolling horizon: greedy on arrival, periodic Hungarian over unstarted jobs, with a reassignment penalty (Section 13).</td></tr>
+    <tr><td>Regret ranks by options, not priority.</td><td>Poor results under overload (Section 8.4).</td><td>Rank by priority first and apply regret within each priority level, or weight regret by priority.</td></tr>
+    <tr><td>Greedy and regret never leave a feasible request unserved by choice.</td><td>They ignore the unassigned weight and cannot use it to drop uneconomic requests.</td><td>Skip a request when its cheapest option costs more than its unserved penalty.</td></tr>
+    <tr><td>Results depend on the chosen weights.</td><td>Poor weights can make the optimal plan undesirable (Section 8.5).</td><td>Calibrate weights with operations staff, or enforce a hard rule such as "priority 5 must be served when feasible".</td></tr>
+    <tr><td>Capacity is a job count, not hours.</td><td>Three long jobs count the same as three short ones.</td><td>Model capacity as working minutes, consistent with job durations.</td></tr>
+    <tr><td>No skill proficiency or customer preference.</td><td>All qualified technicians are treated as equally suitable.</td><td>Add proficiency levels or preferred-technician bonuses as further soft constraints.</td></tr>
+    <tr><td>Hungarian scales as O(n³); regret recomputes every option each round.</td><td>Under 100 ms (Hungarian) and about 400 ms (regret) at the largest setting; too slow at thousands of requests.</td><td>Use a min-cost-flow formulation or partition by region; cache regret's option lists and update only affected requests.</td></tr>
+    <tr><td>No automated full-page UI test.</td><td>Map rendering is verified manually.</td><td>Add browser tests with Playwright against the running application.</td></tr>
+  </table>
+</section>
+
+<footer>Resource Allocation Engine · Technical report · Figures produced by the engine and <code>backend/experiments.py</code></footer>
+</div>
+</body>
+</html>
