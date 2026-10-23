@@ -23,7 +23,7 @@ Greedy takes the leak first because it is the same priority and the window close
 | 24 | 11.01% | 9.89% | 0.5 / 3.6 / 4.8 |
 | 32 | 10.70% | 25.43% | 0.6 / 4.4 / 7.6 |
 
-With spare capacity, regret is essentially tied with Hungarian. The greedy gap is largest around 24 requests, when people still have a choice of jobs, and it does not keep climbing once the morning is overfull. At 32 requests regret is worse than greedy: it spends its scarce technicians on the requests that look fragile, then has nothing left for the rest.
+With spare capacity, regret is essentially tied with Hungarian. The greedy gap is largest around 24 requests, when people still have a choice of jobs, and it does not keep climbing once demand exceeds capacity. At 32 requests regret is worse than greedy: it spends its scarce technicians on the requests that look fragile, then has nothing left for the rest.
 
 ## Scarcity, 10 technicians, 20 requests
 
@@ -42,6 +42,6 @@ On every scarcity row, greedy's served priority-4 and priority-5 jobs travel few
 
 Greedy matches Hungarian when each request has an obvious technician and capacity is loose, and it is the one to ship when requests arrive one at a time or the explanation has to be "we took the best person still free." It fails when a flexible technician is also the only person who can do a second job, which is the trap above.
 
-Hungarian is the score to beat on a morning you can see all at once. It is still fast at these sizes (a few milliseconds).
+Hungarian is the score to beat whenever the day's requests are known all at once. It is still fast at these sizes (a few milliseconds).
 
 Regret fixes the trap and stays close to Hungarian while there is spare capacity. It is the wrong default once the board is overloaded: at 32 requests its gap was 25%, against greedy's 11%.

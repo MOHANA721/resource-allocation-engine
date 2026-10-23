@@ -1,6 +1,6 @@
 # Resource Allocation Engine
 
-Field service for technicians in Bengaluru. Each technician can take two, three, or four jobs. Greedy, Hungarian, and regret assign the same morning with the same cost and the same hard rules. The winner is the lowest total cost. Hungarian is the minimum of that cost for this model.
+Field service for technicians in Bengaluru. Each technician can take two, three, or four jobs. Greedy, Hungarian, and regret assign the same scenario with the same cost and the same hard rules. The winner is the lowest total cost. Hungarian is the minimum of that cost for this model.
 
 A job is feasible only when the technician has the skill, can arrive before the window closes, and can finish inside his shift. Travel is straight-line distance at 40 km/h, starting from home when the shift starts. Jobs are not chained into a route, so two jobs for one person are priced separately and can overlap.
 
@@ -47,7 +47,7 @@ npm run dev
 - API: http://127.0.0.1:8000/docs
 - UI: http://localhost:5173
 
-The UI sliders rebuild the morning from headcount, demand, scarcity, and seed. Moving only the three weights reruns the algorithms on the same morning. **Load trap scenario** is the hand-built case: greedy gives the nearby plumbing job to the only electrician and leaves the panel open. Hungarian and regret serve both.
+The UI sliders build a new scenario from headcount, demand, scarcity, and seed. Moving only the three weights reruns the algorithms on the same scenario. **Load trap scenario** is the hand-built case: greedy gives the nearby plumbing job to the only electrician and leaves the panel open. Hungarian and regret serve both.
 
 ## Tests
 

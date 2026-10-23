@@ -321,7 +321,7 @@ export default function App() {
         <article>
           <h2>What the knobs change</h2>
           <ul>
-            <li>Headcount, demand, and seed rebuild the morning. The same seed rebuilds the same morning.</li>
+            <li>Headcount, demand, scarcity, and seed build a new scenario. The same seed rebuilds the same scenario.</li>
             <li>Scarcity is the chance a technician has one skill instead of two. Higher scarcity means fewer people can cover a job.</li>
             <li>Distance weight makes kilometers matter more. Balance weight charges a technician for each job he already holds. Unassigned weight is the cost of leaving a job open, multiplied by priority.</li>
           </ul>
@@ -361,7 +361,7 @@ export default function App() {
       </section>
 
       {error && <p className="error">{error}</p>}
-      {loading && <p className="loading">Building this morning…</p>}
+      {loading && <p className="loading">Building the scenario…</p>}
 
       {scenario && response && (
         <>
