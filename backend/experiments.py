@@ -5,8 +5,6 @@
 
 from app.allocate import allocate
 from app.generator import generate, trap_scenario
-from app.models import Request
-from app.routes import build_route
 
 
 def _gap(greedy_cost: float, optimal: float) -> float:
@@ -67,60 +65,6 @@ def sweep_load(seeds: int = 30) -> None:
         )
 
 
-def sweep_minutes(seeds: int = 30) -> None:
-    print("working-minutes capacity: 10 technicians, scarcity 0.4")
-    for n_requests in (16, 32):
-        gaps = {"greedy": [], "regret": []}
-        beaten = 0
-        for seed in range(seeds):
-            scenario = generate(10, n_requests, seed, 0.4)
-            outcome = allocate(scenario.technicians, scenario.requests, capacity="minutes")
-            optimal = outcome.results.hungarian.metrics.total_cost
-            for name in gaps:
-                cost = getattr(outcome.results, name).metrics.total_cost
-                gaps[name].append(_gap(cost, optimal))
-                beaten += cost < optimal - 1e-6
-        print(
-            f"  requests {n_requests:2d}  greedy gap {_mean(gaps['greedy']):.2f}%  "
-            f"regret gap {_mean(gaps['regret']):.2f}%  "
-            f"heuristic cheaper than Hungarian in {beaten} of {2 * seeds}"
-        )
-
-
-def sweep_routed(seeds: int = 30) -> None:
-    """Jobs mode prices every job from home; routed mode drives the jobs in order."""
-    print("routed capacity: 10 technicians, scarcity 0.4, straight-line distances")
-    for n_requests in (16, 32):
-        undrivable = 0
-        technicians_used = 0
-        gaps = {"greedy": [], "regret": []}
-        beaten = 0
-        for seed in range(seeds):
-            scenario = generate(10, n_requests, seed, 0.4)
-            techs = {tech.id: tech for tech in scenario.technicians}
-            by_jobs = allocate(scenario.technicians, scenario.requests)
-            for name in ("greedy", "hungarian", "regret"):
-                held: dict[str, list] = {}
-                for row in getattr(by_jobs.results, name).assignments:
-                    if row.technician_id is not None:
-                        held.setdefault(row.technician_id, []).append(
-                            next(r for r in scenario.requests if r.id == row.request_id)
-                        )
-                technicians_used += len(held)
-                undrivable += sum(isinstance(build_route(techs[t], jobs), Request) for t, jobs in held.items())
-            routed = allocate(scenario.technicians, scenario.requests, capacity="routed")
-            optimal = routed.results.hungarian.metrics.total_cost
-            for name in gaps:
-                cost = getattr(routed.results, name).metrics.total_cost
-                gaps[name].append(_gap(cost, optimal))
-                beaten += cost < optimal - 1e-6
-        print(
-            f"  requests {n_requests:2d}  job-count plans that cannot be driven: {undrivable} of "
-            f"{technicians_used} technician days  routed gap greedy {_mean(gaps['greedy']):.2f}% "
-            f"regret {_mean(gaps['regret']):.2f}%  heuristic cheaper than Hungarian in {beaten} of {2 * seeds}"
-        )
-
-
 def compare_distance_sources() -> None:
     """Needs internet for OSRM; falls back to the detour factor without it."""
     print("distance sources: trap and the default scenario (12 technicians, 20 requests, seed 1)")
@@ -152,6 +96,4 @@ if __name__ == "__main__":
     show_trap()
     sweep_scarcity()
     sweep_load()
-    sweep_minutes()
-    sweep_routed()
     compare_distance_sources()

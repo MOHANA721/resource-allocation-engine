@@ -33,7 +33,7 @@ export const METRIC_COLUMNS = [
     id: "total_km",
     label: "Kilometers",
     better: "low",
-    tip: "Straight-line travel for served jobs, at 40 km/h when checking the window. A dropped job adds no distance. This does not pick the winner.",
+    tip: "Travel for served jobs, using the selected distance source, at 40 km/h when checking the window. A dropped job adds no distance. This does not pick the winner.",
   },
   {
     id: "avg_km",

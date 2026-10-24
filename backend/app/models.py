@@ -2,7 +2,7 @@
 
 from typing import Literal, Optional
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 
 SKILLS = ("hvac", "electrical", "plumbing", "carpentry", "appliance")
@@ -40,7 +40,6 @@ class Weights(BaseModel):
     must_serve_p5: bool = Field(True, description="Never leave a priority-5 request open if it can be served")
 
 
-Capacity = Literal["jobs", "minutes", "routed"]
 DistanceSource = Literal["osrm", "detour", "straight"]
 
 
@@ -54,7 +53,6 @@ class Assignment(BaseModel):
     explanation: str
     priority: int
     required_skill: str
-    stop: Optional[int] = Field(None, description="Position in the technician's route, in routed mode")
 
 
 class SkillGap(BaseModel):
@@ -100,16 +98,11 @@ class GenerateRequest(BaseModel):
 
 
 class AllocateRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
     technicians: list[Technician]
     requests: list[Request]
     weights: Weights = Weights()
-    capacity: Capacity = Field(
-        "jobs",
-        description=(
-            "jobs: max_jobs only. minutes: also fit travel there and back plus work inside the shift length. "
-            "routed: jobs are driven in order, home to job to job, and every stop must fit its window and the shift"
-        ),
-    )
     distance: DistanceSource = Field(
         "osrm",
         description="osrm: road distances, falling back to detour if OSRM is unreachable. "

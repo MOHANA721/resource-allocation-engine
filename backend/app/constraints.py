@@ -24,28 +24,12 @@ def pair_distance(tech: Technician, request: Request) -> float:
     return km(point(tech.lat, tech.lng), point(request.lat, request.lng))
 
 
-def shift_minutes(tech: Technician) -> int:
-    return minutes(tech.shift_end) - minutes(tech.shift_start)
-
-
-def job_minutes(tech: Technician, request: Request) -> float:
-    """Working time one job uses: drive there, do the work, drive home."""
-    return request.duration + 2 * travel_minutes(pair_distance(tech, request))
-
-
-def check(
-    tech: Technician,
-    request: Request,
-    jobs_held: int,
-    minutes_used: float | None = None,
-) -> tuple[bool, str]:
+def check(tech: Technician, request: Request, jobs_held: int) -> tuple[bool, str]:
     """Feasibility from home. ``jobs_held`` is how many jobs this person already has.
 
     Travel starts when the shift starts. The technician must arrive before the
     window closes. Work then starts at the later of arrival and window open,
     and must finish before the shift ends. Jobs are not chained stop to stop.
-    When ``minutes_used`` is given, the job must also fit in the working time
-    he has left.
     """
     if jobs_held >= tech.max_jobs:
         return False, "full"
@@ -57,8 +41,6 @@ def check(
     start = max(arrival, minutes(request.window_start))
     if start + request.duration > minutes(tech.shift_end):
         return False, "shift"
-    if minutes_used is not None and minutes_used + job_minutes(tech, request) > shift_minutes(tech):
-        return False, "hours"
     return True, "ok"
 
 

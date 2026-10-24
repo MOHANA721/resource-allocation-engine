@@ -104,15 +104,12 @@
   <h2>1. Summary of findings</h2>
   <ul>
     <li><b>All three algorithms share one rule set and one cost function.</b> Differences in results therefore come only from how each algorithm searches, which makes the comparison fair.</li>
-    <li><b>Hungarian achieves the lowest total cost</b> in the default job-count mode. This is verified against an exhaustive brute-force search on 30 small scenarios at three weight settings, and against the other two algorithms on 60 larger ones. With priority-5 protection on, it first serves as many priority-5 requests as possible, then minimizes cost.</li>
+    <li><b>Hungarian achieves the lowest total cost.</b> This is verified against an exhaustive brute-force search on 30 small scenarios at three weight settings, and against the other two algorithms on 60 larger ones. With priority-5 protection on, it first serves as many priority-5 requests as possible, then minimizes cost.</li>
     <li><b>Greedy is on average 2.6% to 15.9% above optimal</b> on random scenarios, depending on demand and skill scarcity. Its loss is largest when technicians have several skills and demand is moderate to heavy, because it spends flexible technicians early.</li>
-    <li><b>Regret is on average 0.8% to 14.8% above optimal and beats greedy on average at every demand level tested.</b> It handles the highest priority first, and within a priority serves first the request with most to lose. An earlier version ranked by regret alone and was 25.4% above optimal under overload; Section 8.4 shows the case and the fix.</li>
+    <li><b>Regret is on average 0.8% to 14.8% above optimal and beats greedy on average at every demand level tested.</b> It handles the highest priority first, and within a priority serves first the request with most to lose (Section 8.4).</li>
     <li><b>Shorter urgent travel is not a better plan.</b> Greedy consistently sends technicians a shorter distance to urgent jobs, yet loses on total cost, because those short trips take technicians that other jobs needed.</li>
     <li><b>The weights define what "best" means.</b> If leaving a job open is priced too cheaply, the optimal plan drops urgent customers. The <i>Always serve P5</i> setting, on by default, prevents that for priority-5 requests (Section 8.5). Other weights should still be set from business policy before the algorithms are compared.</li>
-    <li><b>Capacity can be measured in working minutes</b> as well as job count. All three algorithms then fit the travel and work of each technician's jobs inside his shift length (Section 8.9).</li>
-    <li><b>Job-count plans are often not drivable.</b> Pricing each job from home ignores that one technician cannot be in two places at once. In 8% to 19% of technician-days, no order of the assigned jobs meets every window. The <i>Routed</i> mode drives each technician's jobs in order and rejects plans that cannot be driven (Sections 8.10 and 11.5).</li>
-    <li><b>In routed mode, the heuristics beat Hungarian.</b> Greedy and regret price each job by what it adds to the actual route. Hungarian can only price jobs from home and then repair the routes. Regret averaged 1% to 3% below Hungarian, and some heuristic was cheaper in about half of the scenarios.</li>
-    <li><b>Distances are real road distances by default</b>, from OSRM (OpenStreetMap). If OSRM is unreachable, straight line × 1.35 is used and the screen says so. 1.35 slightly rounds up the measured median road-to-straight ratio on these Bengaluru points (1.32). Road distances raise costs by about a quarter but did not change which algorithm wins (Section 11.6).</li>
+    <li><b>Distances are real road distances by default</b>, from OSRM (OpenStreetMap). If OSRM is unreachable, straight line × 1.35 is used and the screen says so. 1.35 slightly rounds up the measured median road-to-straight ratio on these Bengaluru points (1.32). Road distances raise costs by about a quarter but did not change which algorithm wins (Section 11.4).</li>
   </ul>
 </section>
 
@@ -121,7 +118,7 @@
   <h2>2. Problem and scope</h2>
   <p>A service company has a fixed team of technicians, each based in a Bengaluru locality, each with one or two trade skills, a shift, and a maximum number of jobs per day. Households submit repair requests, each requiring one skill within a customer time window, taking a known duration, and carrying a priority from 1 (can wait) to 5 (urgent).</p>
   <p>The engine decides <b>which technician serves which request</b>, and which requests remain unserved when capacity is insufficient. It solves the problem with three algorithms, reports the same metrics for each, and visualizes the three plans side by side on a map.</p>
-  <p><b>In scope:</b> skills, capacity, time windows, shifts, travel time on road distances, priority, workload balance, ordering each technician's jobs into a route (Routed mode), explanations, metrics, and comparison. <b>Out of scope by design:</b> live traffic and requests that arrive during the day. These are discussed in <a href="#limits">Section 16</a>.</p>
+  <p><b>In scope:</b> skills, capacity, time windows, shifts, travel time on road distances, priority, workload balance, explanations, metrics, and comparison. <b>Out of scope by design:</b> ordering a technician's jobs into a route, live traffic, and requests that arrive during the day. These are discussed in <a href="#limits">Section 16</a>.</p>
 </section>
 
 <!-- 3 -->
@@ -134,7 +131,7 @@
     <tr><td><code>lat</code>, <code>lng</code></td><td>12.9352, 77.6245</td><td>Home coordinates; the technician starts travelling from here.</td></tr>
     <tr><td><code>skills</code></td><td>["electrical", "plumbing"]</td><td>One or two of: HVAC (heating, ventilation, and air conditioning), electrical, plumbing, carpentry, appliance.</td></tr>
     <tr><td><code>shift_start</code>, <code>shift_end</code></td><td>08:00, 16:00</td><td>One of 08:00–16:00, 09:00–17:00, 12:00–20:00.</td></tr>
-    <tr><td><code>max_jobs</code></td><td>3</td><td>Daily job limit: 2, 3, or 4 (1 in the hand-built cases). In working-minutes mode the shift length is a second limit (Section 5).</td></tr>
+    <tr><td><code>max_jobs</code></td><td>3</td><td>Daily job limit: 2, 3, or 4 (1 in the hand-built cases).</td></tr>
   </table>
   <h3>3.2 Request</h3>
   <table>
@@ -147,7 +144,7 @@
     <tr><td><code>priority</code></td><td>5</td><td>1 to 5. Scales the penalty for leaving the request unserved.</td></tr>
   </table>
   <h3>3.3 Assignment and result</h3>
-  <p>For each request, each algorithm returns an assignment containing the technician (or none), the distance, the cost charged, and a plain-language explanation. In routed mode it also gives the stop number in the technician's route, and the distance is the kilometres the job adds to that route. Each algorithm also returns a set of metrics (<a href="#metrics">Section 10</a>). Requests whose skill no technician has are returned separately as <b>skill gaps</b>.</p>
+  <p>For each request, each algorithm returns an assignment containing the technician (or none), the distance, the cost charged, and a plain-language explanation. Each algorithm also returns a set of metrics (<a href="#metrics">Section 10</a>). Requests whose skill no technician has are returned separately as <b>skill gaps</b>.</p>
 </section>
 
 <!-- 4 -->
@@ -156,7 +153,7 @@
   <div class="flow">
     <div><b>1. Configure</b>The user sets headcount, demand, scarcity, and seed in the UI.</div>
     <div><b>2. Generate</b><code>POST /api/scenario</code> builds the workforce first, then requests drawn from that workforce's skills.</div>
-    <div><b>3. Allocate</b><code>POST /api/allocate</code> receives the scenario, the three cost weights, the priority-5 setting, the capacity mode, and the distance source.</div>
+    <div><b>3. Allocate</b><code>POST /api/allocate</code> receives the scenario, the three cost weights, the priority-5 setting, and the distance source.</div>
     <div><b>4. Solve</b>Skill gaps are separated; one distance table is built (road distances from OSRM, cached); greedy, Hungarian, and regret solve the same remaining requests with it.</div>
     <div><b>5. Present</b>The UI shows the metrics table, three maps, and per-request explanations.</div>
   </div>
@@ -166,7 +163,7 @@
     <tr><td><code>GET /api/health</code></td><td>—</td><td>Liveness check.</td></tr>
     <tr><td><code>POST /api/scenario</code></td><td><code>n_techs</code> (1–40), <code>n_requests</code> (0–80), <code>seed</code>, <code>scarcity</code> (0–1)</td><td>Technicians and requests.</td></tr>
     <tr><td><code>GET /api/scenario/trap</code></td><td>—</td><td>The hand-built case in Section 8.1.</td></tr>
-    <tr><td><code>POST /api/allocate</code></td><td>Technicians, requests, <code>weights</code> (<code>w_distance</code>, <code>w_balance</code>, <code>w_unassigned</code>, <code>must_serve_p5</code>), <code>capacity</code> (<code>jobs</code>, <code>minutes</code>, or <code>routed</code>), <code>distance</code> (<code>osrm</code> by default, <code>detour</code>, or <code>straight</code>)</td><td>Skill gaps; assignments and metrics for each algorithm; <code>distance_source</code> and <code>distance_note</code> stating which distances were actually used.</td></tr>
+    <tr><td><code>POST /api/allocate</code></td><td>Technicians, requests, <code>weights</code> (<code>w_distance</code>, <code>w_balance</code>, <code>w_unassigned</code>, <code>must_serve_p5</code>), <code>distance</code> (<code>osrm</code> by default, <code>detour</code>, or <code>straight</code>)</td><td>Skill gaps; assignments and metrics for each algorithm; <code>distance_source</code> and <code>distance_note</code> stating which distances were actually used.</td></tr>
   </table>
   <h3>4.2 Design decisions</h3>
   <ul>
@@ -184,7 +181,6 @@
     <tr><td><code>backend/app/generator.py</code></td><td>Seeded scenario generator and the trap scenario.</td></tr>
     <tr><td><code>backend/app/distances.py</code></td><td>Distance sources: OSRM road table (blocked, cached, throttled to one request per second), detour factor, straight line.</td></tr>
     <tr><td><code>backend/app/constraints.py</code></td><td>Travel time, hard-constraint check, cost and penalty.</td></tr>
-    <tr><td><code>backend/app/routes.py</code></td><td>Route simulation and cheapest insertion for routed mode.</td></tr>
     <tr><td><code>backend/app/allocate.py</code></td><td>Skill gaps, the three algorithms, explanations, metrics.</td></tr>
     <tr><td><code>backend/app/main.py</code></td><td>FastAPI routes and CORS.</td></tr>
     <tr><td><code>backend/experiments.py</code></td><td>Parameter sweeps behind Section 11.</td></tr>
@@ -196,15 +192,13 @@
 <!-- 5 -->
 <section id="rules">
   <h2>5. Hard constraints</h2>
-  <p>A technician may serve a request only if all four conditions hold, plus a fifth in working-minutes mode or a sixth in routed mode. Distances come from the selected distance source (road distances from OSRM by default). A pair that fails any condition is never considered by any algorithm.</p>
+  <p>A technician may serve a request only if all four conditions hold. Distances come from the selected distance source (road distances from OSRM by default). A pair that fails any condition is never considered by any algorithm.</p>
   <table>
     <tr><th>#</th><th>Constraint</th><th>Rule</th></tr>
     <tr><td>1</td><td>Skill</td><td>The request's skill is in the technician's skill list.</td></tr>
     <tr><td>2</td><td>Capacity</td><td>The technician holds fewer jobs than <code>max_jobs</code>.</td></tr>
     <tr><td>3</td><td>Arrival</td><td>Leaving home at shift start and travelling the distance at an average 40 km/h, the technician arrives no later than <code>window_end</code>.</td></tr>
     <tr><td>4</td><td>Shift end</td><td>Work starts at the later of arrival and <code>window_start</code>, and finishes no later than <code>shift_end</code>.</td></tr>
-    <tr><td>5</td><td>Working time (minutes mode only)</td><td>Over all his jobs, drive there + work + drive back fits inside his shift length (for example 480 minutes for 08:00–16:00).</td></tr>
-    <tr><td>6</td><td>Route (routed mode only)</td><td>His jobs are driven in order: home → stop 1 → stop 2 → … Each job starts after he finishes the previous one and drives over, inside its window, and the last one finishes before shift end. Conditions 3 and 4 are checked along this route instead of from home.</td></tr>
   </table>
   <h3>5.1 Worked cases</h3>
   <table>
@@ -214,8 +208,6 @@
     <tr><td>Runs past shift</td><td>Shift 08:00–10:00; 1 km; window 09:00–12:00; 120 min</td><td>Start 09:00, finish 11:00, after 10:00</td><td class="lose">Rejected (shift end)</td></tr>
     <tr><td>Wrong skill</td><td>Plumbing-only technician; electrical request 4.9 km away</td><td>Distance is irrelevant</td><td class="lose">Rejected (skill)</td></tr>
     <tr><td>Full</td><td><code>max_jobs</code> 1, already holding one job</td><td>—</td><td class="lose">Rejected (capacity)</td></tr>
-    <tr><td>Out of working time</td><td>Minutes mode; shift 08:00–12:00 (240 min); two 90-minute jobs next door already held</td><td>180 + 90 = 270 minutes, more than 240</td><td class="lose">Rejected (working time)</td></tr>
-    <tr><td>Overlapping jobs</td><td>Routed mode; two 90-minute jobs next door, both with window 09:00–10:00</td><td>The first finishes at 10:30, after the second window closes. In job-count mode both are accepted, because each is checked from home.</td><td class="lose">Second rejected (route)</td></tr>
   </table>
   <p>When a request remains unserved, its explanation names the reason, for example: <i>"no technician with plumbing can arrive before the window closes and finish inside his shift."</i></p>
 </section>
@@ -265,7 +257,7 @@ total cost        = Σ assignment costs  +  Σ unserved penalties</pre>
     <div class="card">
       <h4>7.3 Regret (custom heuristic)</h4>
       <p><b>Method.</b> For each open request, regret = cost of second-best option − cost of best; a request with one option has infinite regret. Among the open requests with the highest priority, serve the one with the largest regret, then repeat. Ties go to the earlier window close. Requests are left open on the same terms as greedy (Section 6.1).</p>
-      <p><b>Complexity.</b> Each request's options are built once. After each assignment, only the chosen technician's entry is updated in the requests that list him, so distances are never recomputed. About 12–16 ms at the largest setting (300–400 ms before this optimization).</p>
+      <p><b>Complexity.</b> Each request's options are built once. After each assignment, only the chosen technician's entry is updated in the requests that list him, so distances are never recomputed. About 12–16 ms at the largest setting.</p>
       <p><b>Explanation given.</b> "Chosen early: among the highest-priority requests left, it had the largest regret."</p>
     </div>
   </div>
@@ -276,7 +268,6 @@ total cost        = Σ assignment costs  +  Σ unserved penalties</pre>
     <li><b>Unserved columns.</b> Each request has its own column priced at <code>w_unassigned</code> × priority, allowing the solver to leave a request unserved when serving it would cost more.</li>
     <li><b>Priority-5 guard.</b> With <i>Always serve P5</i> on, a priority-5 request's unserved column also carries a guard larger than the cost of any complete plan. The solver therefore serves as many priority-5 requests as possible before it considers cost. The guard is not included in reported costs.</li>
     <li><b>Infeasible cells</b> (wrong skill, late arrival, shift overrun, or another request's unserved column) receive a blocking cost larger than leaving every request unserved, so they are never chosen.</li>
-    <li><b>Working minutes.</b> An assignment matrix cannot add up time across a technician's jobs. In minutes mode, if the solution puts a technician past his working time, his longest job is forbidden for him and the matrix is solved again, until no technician is over. The plan is always feasible but, in this mode only, not guaranteed optimal: greedy or regret was cheaper in 4 of 120 comparisons (Section 11.4).</li>
   </ul>
   <p>Matrix for the case in Section 8.1, default settings. Each unserved cell is the penalty 150 plus the priority-5 guard of 301:</p>
   <table>
@@ -285,20 +276,12 @@ total cost        = Σ assignment costs  +  Σ unserved penalties</pre>
     <tr><td>Panel (electrical, P5)</td><td class="num win">1.65</td><td class="num muted">1903 blocked</td><td class="num muted">1903 blocked</td><td class="num">451</td></tr>
   </table>
   <p>The minimum selection (highlighted) is 4.63 + 1.65 = 6.27. The greedy plan, 0.26 + 451, is also present in the matrix and is rejected as more expensive. It would be rejected even without the guard (0.26 + 150 = 150.26).</p>
-  <h3>7.5 Routed mode</h3>
-  <p>In routed mode, each technician's jobs form a route, home → stop 1 → stop 2 → …, which ends at the last job. A job's distance is the kilometres it <i>adds</i> to the route, so the plan's kilometres equal the total length of all routes.</p>
-  <ul>
-    <li><b>Greedy and regret: cheapest insertion.</b> For each technician, the job is tried in every position of his current route. Positions that break a window or the shift (Section 5, condition 6) are skipped, and the cheapest remaining position is the option. Cost = <code>w_distance</code> × added km + <code>w_balance</code> × jobs held. Regret uses the same options, and after an assignment only the chosen technician's options are recomputed.</li>
-    <li><b>Hungarian: price from home, then repair.</b> The matrix cannot price a job by what it adds to a route, because that depends on which other jobs the same technician gets. Hungarian therefore solves the job-count matrix (distance from home). Then each technician's jobs are inserted into a route, earliest window close first. If a job cannot fit, it is forbidden for that technician and the matrix is solved again. The final costs are recomputed from the actual routes.</li>
-    <li><b>Consequence.</b> Hungarian is exact for its matrix but not for routes. On random scenarios, regret was on average 1% to 3% cheaper than Hungarian, and some heuristic was cheaper in about half of them (Section 11.5). An exact routed solution needs a vehicle-routing solver (Section 16.3).</li>
-    <li><b>Runtime at 40 technicians × 80 requests:</b> greedy about 36 ms, Hungarian about 99 ms, regret about 59 ms, against about 11, 43, and 29 ms in job-count mode on the same machine.</li>
-  </ul>
 </section>
 
 <!-- 8 -->
 <section id="cases">
   <h2>8. Case studies</h2>
-  <p>Each case is small enough to verify by hand. All figures are produced by the engine and most are asserted in the test suite. Cases 8.1 to 8.10 use straight-line distances, selected in the UI as <i>Distance source: Straight line</i>, so that they can be checked with a ruler. Case 8.11 shows how the figures change on road distances, the default.</p>
+  <p>Each case is small enough to verify by hand. All figures are produced by the engine and most are asserted in the test suite. Cases 8.1 to 8.8 use straight-line distances so the kilometres can be checked with a ruler. The screen offers road distances and straight line × 1.35. Case 8.9 shows how those two change the figures.</p>
 
   <div class="case">
     <h3>8.1 Greedy strands a specialist (the "trap" scenario)</h3>
@@ -352,23 +335,21 @@ total cost        = Σ assignment costs  +  Σ unserved penalties</pre>
   </div>
 
   <div class="case">
-    <h3>8.4 Regret under overload: the failure and its fix</h3>
-    <p><span class="lbl">Setup</span>Vikram (electrical + plumbing) and Arjun (plumbing), one job each. Three requests: an electrical switch (priority <b>1</b>, only Vikram), a leak (priority 5), and a burst pipe (priority 5); both technicians can serve either plumbing job. One request must be left unserved.</p>
-    <p><span class="lbl">Earlier regret</span>Ranked by regret alone. The switch has one option, so its regret is infinite and it took Vikram first. The two priority-5 jobs then shared Arjun, and the burst pipe was left unserved.</p>
-    <p><span class="lbl">Current regret</span>Ranks by priority first. The two priority-5 jobs are served before the switch, so the switch is the one left unserved, as with greedy and Hungarian.</p>
+    <h3>8.4 Regret under overload serves the urgent jobs</h3>
+    <p><span class="lbl">Setup</span>Vikram (electrical + plumbing) and Arjun (plumbing), one job each. Three requests: an electrical switch (priority <b>1</b>, only Vikram), a leak (priority 5), and a burst pipe (priority 5); both technicians can serve either plumbing job. One request must be left unserved. The switch has only one feasible technician, so its regret is infinite.</p>
+    <p><span class="lbl">Result</span>Regret ranks by priority first and applies regret only within a priority. The two priority-5 jobs are served before the switch, so the switch is the one left unserved, as with greedy and Hungarian.</p>
     <table>
       <tr><th>Algorithm</th><th>Switch (P1)</th><th>Leak (P5)</th><th>Burst (P5)</th><th class="num">Total cost</th><th class="num">Urgent misses</th></tr>
       <tr class="win"><td>Greedy</td><td>unserved</td><td>Vikram</td><td>Arjun</td><td class="num">33.35</td><td class="num">0</td></tr>
       <tr class="win"><td>Hungarian</td><td>unserved</td><td>Vikram</td><td>Arjun</td><td class="num">33.35</td><td class="num">0</td></tr>
-      <tr class="lose"><td>Regret, earlier version</td><td>Vikram</td><td>Arjun</td><td>unserved</td><td class="num">153.65</td><td class="num">1</td></tr>
-      <tr class="win"><td>Regret, current version</td><td>unserved</td><td>Vikram</td><td>Arjun</td><td class="num">33.35</td><td class="num">0</td></tr>
+      <tr class="win"><td>Regret</td><td>unserved</td><td>Vikram</td><td>Arjun</td><td class="num">33.35</td><td class="num">0</td></tr>
     </table>
-    <p><span class="lbl">Lesson</span>Regret measures how much a request loses by missing its best technician, not whether the request is important enough to serve. Using it only to order requests of equal priority keeps its benefit (Section 8.1) without letting a low-priority request displace an urgent one. Across 30 scenarios with 32 requests for 10 technicians, regret's average gap fell from 25.4% to 7.9%.</p>
+    <p><span class="lbl">Lesson</span>Regret measures how much a request loses by missing its best technician. It is used only to order requests of equal priority, so a low-priority request with one option does not displace an urgent one. Within the priority-5 pair it still prefers the request with more to lose (Section 8.1). Across 30 scenarios with 32 requests for 10 technicians, regret's average gap is 7.9% (Section 11.1).</p>
   </div>
 
   <div class="case">
     <h3>8.5 Weights that undervalue unserved requests, and the priority-5 rule</h3>
-    <p><span class="lbl">Setup</span>The trap scenario (8.1) with <code>w_distance = 5</code>, <code>w_balance = 2</code>, <code>w_unassigned = 5</code>. Leaving a priority-5 request unserved now costs only 25, while sending Arjun to the leak costs 23.15.</p>
+    <p><span class="lbl">Setup</span>The trap scenario (8.1) with <code>w_distance = 5</code>, <code>w_balance = 2</code>, <code>w_unassigned = 5</code>. Leaving a priority-5 request unserved costs 25, while sending Arjun to the leak costs 23.15.</p>
     <p><span class="lbl">Always serve P5 off</span></p>
     <table>
       <tr><th>Algorithm</th><th>Leak</th><th>Panel</th><th class="num">Total cost</th><th class="num">Served</th><th class="num">Urgent misses</th></tr>
@@ -408,36 +389,11 @@ total cost        = Σ assignment costs  +  Σ unserved penalties</pre>
       <tr><td class="num">30 (default)</td><td class="num">30</td><td>Ravi</td><td>Ravi</td><td>Ravi</td></tr>
     </table>
     <p><span class="lbl">Explanation shown</span><i>"Unserved Household far: left open on purpose. The cheapest option, Ravi at 25.0 km, costs 25.0, more than the penalty of 10.0 for leaving it open."</i></p>
-    <p><span class="lbl">Lesson</span>All three algorithms now respond to the unassigned weight in the same direction. Before this change, greedy and regret served every servable request whatever it cost, so the unassigned weight changed only their reported score. If the request were priority 5, <i>Always serve P5</i> would keep it served at any weight.</p>
+    <p><span class="lbl">Lesson</span>All three algorithms respond to the unassigned weight in the same direction. If the request were priority 5, <i>Always serve P5</i> would keep it served at any weight.</p>
   </div>
 
   <div class="case">
-    <h3>8.9 Working-minutes capacity</h3>
-    <p><span class="lbl">Setup</span>Ravi works 08:00–12:00 (240 minutes) with <code>max_jobs = 4</code>. Three 90-minute plumbing jobs are next door to his home.</p>
-    <table>
-      <tr><th>Capacity mode</th><th>Calculation</th><th class="num">Served (each algorithm)</th></tr>
-      <tr><td>Job count</td><td>3 jobs ≤ 4</td><td class="num">3</td></tr>
-      <tr><td>Working minutes</td><td>3 × 90 = 270 minutes, more than 240</td><td class="num">2</td></tr>
-    </table>
-    <p><span class="lbl">Explanation shown</span>Greedy and regret: <i>"Unserved Household 3: every technician with plumbing who could reach it has run out of working time today."</i> Hungarian: <i>"Unserved Household 3: left open in the minimum-cost plan. Every qualified technician who can reach it is fully booked by job count or working time, and rearranging them would not cost less than the 90.0 for leaving it open."</i></p>
-    <p><span class="lbl">Lesson</span>A job count treats three short jobs and three long jobs alike; working minutes do not. In generated scenarios with 32 requests, minutes mode serves 8 to 13 fewer requests in total across 30 scenarios. Those requests would otherwise have been promised to technicians without the time to do them.</p>
-  </div>
-
-  <div class="case">
-    <h3>8.10 Routed mode: driving from job to job</h3>
-    <p><span class="lbl">Setup A</span>One technician at home; two requests on the same road, "near" 1 km east and "far" 2 km east, with wide windows.</p>
-    <table>
-      <tr><th>Capacity mode</th><th>How distance is counted</th><th class="num">Kilometres (each algorithm)</th></tr>
-      <tr><td>Job count</td><td>home → near (1) + home → far (2)</td><td class="num">3.0</td></tr>
-      <tr class="win"><td>Routed</td><td>home → near (1), stop 1; near → far (1), stop 2</td><td class="num">2.0</td></tr>
-    </table>
-    <p><span class="lbl">Setup B</span>The same technician; two 90-minute jobs next door to each other, both with window 09:00–10:00.</p>
-    <p><span class="lbl">Result</span>Job-count mode assigns both, because each is checked from home. Nobody can do both: the first finishes at 10:30, after the second window closes. Routed mode assigns one and leaves the other open. Greedy and regret explain: <i>"no technician with … can fit it into his route before its window closes and inside his shift."</i> Hungarian explains that every qualified technician is <i>"fully booked by job count or route timing."</i></p>
-    <p><span class="lbl">Lesson</span>Routed mode is both cheaper, because nearby jobs are chained, and stricter, because plans that cannot be driven are rejected. On the map, each technician's jobs are joined in stop order, and the hover tooltip shows "stop N for Name".</p>
-  </div>
-
-  <div class="case">
-    <h3>8.11 Road distances versus straight lines</h3>
+    <h3>8.9 Road distances versus straight lines</h3>
     <p><span class="lbl">Setup</span>The same two scenarios solved with each distance source. OSRM values are the real Bengaluru road network at the time of writing.</p>
     <table>
       <tr><th>Scenario</th><th>Distance source</th><th class="num">Greedy</th><th class="num">Hungarian</th><th class="num">Regret</th></tr>
@@ -448,7 +404,7 @@ total cost        = Σ assignment costs  +  Σ unserved penalties</pre>
       <tr><td>Straight line × 1.35</td><td class="num">249.8</td><td class="num">211.8</td><td class="num">267.3</td></tr>
       <tr><td>Road (OSRM)</td><td class="num">245.2</td><td class="num">211.2</td><td class="num">237.8</td></tr>
     </table>
-    <p><span class="lbl">Lesson</span>Road distances are about a third longer than straight lines here, so costs rise. Hungarian still gives the lowest total in job-count mode. The ranking of greedy and regret can change: on the default scenario, regret is worst on straight lines and better than greedy on roads. The detour factor approximates the road total well (211.8 against 211.2 for Hungarian), but it does not reproduce individual road choices, which is why OSRM is the default.</p>
+    <p><span class="lbl">Lesson</span>Road distances are about a third longer than straight lines here, so costs rise. Hungarian still gives the lowest total. The ranking of greedy and regret can change: on the default scenario, regret is worst on straight lines and better than greedy on roads. The detour factor approximates the road total well (211.8 against 211.2 for Hungarian), but it does not reproduce individual road choices, which is why OSRM is the default.</p>
   </div>
 </section>
 
@@ -469,8 +425,7 @@ total cost        = Σ assignment costs  +  Σ unserved penalties</pre>
   <p>Changing these reruns all three algorithms on the same scenario.</p>
   <table>
     <tr><th>Control</th><th>Options (default)</th><th>Effect</th><th>Significance</th></tr>
-    <tr><td>Capacity</td><td>Job count, Working minutes, Routed (Job count)</td><td>Working minutes adds the fifth hard constraint (Section 5): each technician's drive there, work, and drive back must fit inside his shift length. Routed adds the sixth: his jobs are driven in order, and each must fit its window after the previous one (Section 7.5).</td><td>Realism. Working minutes stops a technician being promised more work than his day can hold (Section 8.9). Routed also stops overlapping jobs and counts the real route length (Section 8.10).</td></tr>
-    <tr><td>Distance source</td><td>Road (OSRM), Straight line × 1.35, Straight line (Road)</td><td>Sets how kilometres between two points are measured. Road distances come from the public OSRM server; if it is unreachable, straight line × 1.35 is used and the note under the scenario says so.</td><td>Accuracy. Road distances reflect rivers, one-way streets, and the road network; straight lines make results easy to check by hand (Section 8.11).</td></tr>
+    <tr><td>Distance source</td><td>Road (OSRM), Straight line × 1.35 (Road)</td><td>Sets how kilometres between two points are measured. Road distances come from the public OSRM server; if it is unreachable, straight line × 1.35 is used and the note under the scenario says so, in amber.</td><td>Accuracy. Road distances reflect the road network. Straight line × 1.35 is the offline stand-in, and the automatic fallback (Section 8.9).</td></tr>
     <tr><td>Always serve P5 when possible</td><td>on / off (on)</td><td>A priority-5 request is never left open on purpose (Section 6.1).</td><td>Safety net. Protects urgent customers from badly chosen weights (Section 8.5).</td></tr>
   </table>
   <h3>9.3 Cost weights</h3>
@@ -488,7 +443,7 @@ total cost        = Σ assignment costs  +  Σ unserved penalties</pre>
     <tr><td>Regret</td><td>Yes: they set the cheapest technician and the regret used for ordering.</td><td>Yes, as for greedy.</td></tr>
     <tr><td>Hungarian</td><td>Yes.</td><td>Yes: it sets the point at which leaving a request unserved is cheaper than serving it, judged over the whole plan.</td></tr>
   </table>
-  <p>Before this version, greedy and regret served every servable request, so the unassigned weight changed only their reported cost. Now all three use it to decide. At the default weights it rarely changes a choice; at low values it does (Section 8.8). These properties are asserted in the test suite. Scaling all three weights by the same factor leaves every plan unchanged and scales every total by that factor.</p>
+  <p>At the default weights the unassigned weight rarely changes a choice; at low values it does (Section 8.8). These properties are asserted in the test suite. Scaling all three weights by the same factor leaves every plan unchanged and scales every total by that factor.</p>
   <div class="note warn"><p><b>Recommendation.</b> Set the weights from business policy first (for example, "how many kilometres of travel is one unserved priority-5 customer worth?"), then compare algorithms. All three are always scored with the same weights, so the comparison remains fair at any setting.</p></div>
 </section>
 
@@ -499,11 +454,11 @@ total cost        = Σ assignment costs  +  Σ unserved penalties</pre>
   <table>
     <tr><th>Metric</th><th>Definition</th><th>Importance</th></tr>
     <tr><td><b>Total cost</b></td><td>Sum of assignment costs and unserved penalties.</td><td>The objective. It combines travel, workload, and service in stated proportions.</td></tr>
-    <tr><td><b>Gap vs Hungarian</b></td><td>Algorithm's total cost minus Hungarian's.</td><td>Cost of not optimizing. Zero means the algorithm matched the optimum. A negative gap means the algorithm left open a priority-5 request that Hungarian was required to serve (Section 8.5), or, in minutes and routed modes, that a heuristic found a cheaper plan.</td></tr>
+    <tr><td><b>Gap vs Hungarian</b></td><td>Algorithm's total cost minus Hungarian's.</td><td>Cost of not optimizing. Zero means the algorithm matched the optimum. A negative gap means the algorithm left open a priority-5 request that Hungarian was required to serve (Section 8.5).</td></tr>
     <tr><td>Assigned</td><td>Requests served (skill gaps excluded).</td><td>Customers who receive a visit.</td></tr>
     <tr><td>Unassigned</td><td>Requests left unserved (skill gaps excluded).</td><td>Customers who do not; read together with which priorities they had.</td></tr>
     <tr><td>Coverage</td><td>Assigned ÷ servable requests.</td><td>Service level as a percentage, comparable across scenario sizes.</td></tr>
-    <tr><td>Kilometres</td><td>Travel over served requests; in routed mode, the total length of all routes.</td><td>Fuel and time. An unserved request adds zero, so fewer kilometres can indicate fewer visits.</td></tr>
+    <tr><td>Kilometres</td><td>Travel over served requests, measured from each technician's home.</td><td>Fuel and time. An unserved request adds zero, so fewer kilometres can indicate fewer visits.</td></tr>
     <tr><td>Average km</td><td>Kilometres ÷ served requests.</td><td>Typical trip length.</td></tr>
     <tr><td>Urgent km</td><td>Travel over served priority-4 and priority-5 requests.</td><td>Responsiveness to urgent customers; must be read with urgent misses.</td></tr>
     <tr><td>Urgent average km</td><td>Urgent km ÷ served urgent requests.</td><td>Typical urgent response distance.</td></tr>
@@ -517,7 +472,7 @@ total cost        = Σ assignment costs  +  Σ unserved penalties</pre>
 <!-- 11 -->
 <section id="results">
   <h2>11. Experimental results</h2>
-  <p>Produced by <code>backend/experiments.py</code>. Each row averages 30 seeded scenarios with 10 technicians and default weights. Gap = (algorithm cost − Hungarian cost) ÷ Hungarian cost. Sections 11.1 to 11.5 use straight-line distances, so they run offline and are exactly reproducible; Section 11.6 compares distance sources.</p>
+  <p>Produced by <code>backend/experiments.py</code>. Each row averages 30 seeded scenarios with 10 technicians and default weights. Gap = (algorithm cost − Hungarian cost) ÷ Hungarian cost. Sections 11.1 to 11.3 use straight-line distances, so they run offline and are exactly reproducible; Section 11.4 compares distance sources.</p>
   <h3>11.1 Effect of demand (scarcity 0.4)</h3>
   <table>
     <tr><th class="num">Requests</th><th class="num">Greedy gap</th><th class="num">Regret gap</th><th class="num">Runtime ms (greedy / Hungarian / regret)</th></tr>
@@ -526,7 +481,7 @@ total cost        = Σ assignment costs  +  Σ unserved penalties</pre>
     <tr><td class="num">24</td><td class="num">11.01%</td><td class="num win">8.20%</td><td class="num">0.6 / 1.9 / 0.9</td></tr>
     <tr><td class="num">32</td><td class="num">10.70%</td><td class="num win">7.91%</td><td class="num">0.6 / 2.4 / 1.4</td></tr>
   </table>
-  <p>Regret now has the smaller gap at every demand level. Under overload (32 requests) its gap was 25.43% when it ranked by regret alone; ranking by priority first brought it to 7.91% (Section 8.4). The price is a small loss with spare capacity (0.77% against 0.02% at 8 requests), where the old ordering was close to optimal. Greedy's gap peaks around 24 requests, when technicians still have a choice of jobs, and does not continue to rise once demand exceeds capacity.</p>
+  <p>Regret has the smaller gap at every demand level. At 32 requests that gap is 7.91% (Section 8.4). Greedy's gap peaks around 24 requests, when technicians still have a choice of jobs, and does not continue to rise once demand exceeds capacity.</p>
   <h3>11.2 Effect of skill scarcity (20 requests)</h3>
   <table>
     <tr><th class="num">Scarcity</th><th class="num">Greedy gap</th><th class="num">Regret gap</th><th class="num">Urgent avg km, greedy</th><th class="num">Urgent avg km, Hungarian</th></tr>
@@ -535,7 +490,7 @@ total cost        = Σ assignment costs  +  Σ unserved penalties</pre>
     <tr><td class="num">0.80</td><td class="num">6.98%</td><td class="num win">5.53%</td><td class="num">7.75</td><td class="num">8.11</td></tr>
     <tr><td class="num">0.95</td><td class="num">2.58%</td><td class="num">2.61%</td><td class="num">7.67</td><td class="num">7.94</td></tr>
   </table>
-  <p><b>The gap narrows as skills become scarcer.</b> Hungarian's advantage comes from choice; when most requests have only one or two qualified technicians, there is little to rearrange. At scarcity 0.95 nearly every request has infinite regret, so within each priority regret's ordering no longer distinguishes requests, and it performs the same as greedy (2.61% against 2.58%). Before ranking by priority first, regret fell behind greedy here (5.99%).</p>
+  <p><b>The gap narrows as skills become scarcer.</b> Hungarian's advantage comes from choice; when most requests have only one or two qualified technicians, there is little to rearrange. At scarcity 0.95 nearly every request has infinite regret, so within each priority regret's ordering no longer distinguishes requests, and it performs the same as greedy (2.61% against 2.58%).</p>
   <p><b>Greedy has shorter urgent travel in every row</b> yet a higher total cost. It gives each urgent request its nearest technician first, which can remove a technician that a later request needed.</p>
   <h3>11.3 A representative scenario</h3>
   <p>12 technicians, 20 requests, scarcity 0.40, seed 1 (the application default):</p>
@@ -549,38 +504,23 @@ total cost        = Σ assignment costs  +  Σ unserved penalties</pre>
     <tr><td><b>Gap vs Hungarian</b></td><td class="num">25.5</td><td class="num win">0.0</td><td class="num">47.4</td></tr>
   </table>
   <p>Hungarian serves every request and travels 25.5 km less than greedy. Regret leaves one priority-1 plumbing request unserved: by the time it reaches that request, every plumber is full. Regret beats greedy on average (Sections 11.1 and 11.2) but not in every scenario, and this default scenario is one where it loses. Urgent kilometres are lowest for greedy and regret, yet both cost more than Hungarian, which is why kilometres alone would pick the wrong winner.</p>
-  <h3>11.4 Working-minutes capacity (scarcity 0.4)</h3>
-  <table>
-    <tr><th class="num">Requests</th><th class="num">Greedy gap</th><th class="num">Regret gap</th><th class="num">Heuristic cheaper than Hungarian</th></tr>
-    <tr><td class="num">16</td><td class="num">6.02%</td><td class="num win">3.85%</td><td class="num">2 of 60 comparisons</td></tr>
-    <tr><td class="num">32</td><td class="num">9.75%</td><td class="num win">7.21%</td><td class="num">2 of 60 comparisons</td></tr>
-  </table>
-  <p>In minutes mode Hungarian re-solves after removing time overruns (Section 7.4), so it is no longer guaranteed optimal. It still produced the cheapest plan in 116 of 120 comparisons, and the ranking of the three algorithms is unchanged.</p>
-  <h3>11.5 Routed mode (scarcity 0.4)</h3>
-  <table>
-    <tr><th class="num">Requests</th><th class="num">Job-count technician-days that cannot be driven</th><th class="num">Greedy gap</th><th class="num">Regret gap</th><th class="num">Heuristic cheaper than Hungarian</th></tr>
-    <tr><td class="num">16</td><td class="num">59 of 714 (8%)</td><td class="num">1.03%</td><td class="num win">−3.04%</td><td class="num">28 of 60 comparisons</td></tr>
-    <tr><td class="num">32</td><td class="num">155 of 837 (19%)</td><td class="num">−0.54%</td><td class="num win">−1.22%</td><td class="num">27 of 60 comparisons</td></tr>
-  </table>
-  <p>The second column takes each technician's jobs from the Hungarian job-count plan and asks whether any order of them can be driven within the windows and the shift. In 8% to 19% of technician-days, none can, so the job-count plan promises visits that cannot happen. In routed mode, a negative gap means the heuristic beat Hungarian. Regret is the best of the three on average. Hungarian prices jobs from home and only repairs the routes afterwards (Section 7.5), so it misses the savings of chaining nearby jobs that cheapest insertion finds.</p>
-  <h3>11.6 Distance sources</h3>
-  <p>Section 8.11 gives the effect on the trap and default scenarios. Over 2,944 point pairs more than 0.5 km apart, taken from three default-sized scenarios (seeds 1–3), the median ratio of OSRM road distance to straight-line distance is 1.32. The fallback factor 1.35 rounds this up slightly, so that the fallback leans towards overestimating travel. The first OSRM fetch for a 40 × 80 scenario took about 7 s, mostly the required one-second spacing between requests to the public server. Afterwards it took about 0.2 s, because results are cached for every later run of that scenario, such as moving a slider.</p>
+  <h3>11.4 Distance sources</h3>
+  <p>Section 8.9 gives the effect on the trap and default scenarios. Over 2,944 point pairs more than 0.5 km apart, taken from three default-sized scenarios (seeds 1–3), the median ratio of OSRM road distance to straight-line distance is 1.32. The fallback factor 1.35 rounds this up slightly, so that the fallback leans towards overestimating travel. The first OSRM fetch for a 40 × 80 scenario took about 7 s, mostly the required one-second spacing between requests to the public server. Afterwards it took about 0.2 s, because results are cached for every later run of that scenario, such as moving a slider.</p>
 </section>
 
 <!-- 12 -->
 <section id="verdict">
   <h2>12. Conclusions: which algorithm wins, and why</h2>
-  <div class="note good"><p><b>Hungarian wins on total cost in every scenario in job-count mode.</b> It solves the full assignment exactly, so no plan satisfying the same constraints has a lower cost under the same weights; with <i>Always serve P5</i> on, it is optimal among plans that serve the most priority-5 requests. In working-minutes mode it is near-optimal (cheapest in 116 of 120 comparisons). It remains fast at the sizes supported: 1–3 ms for 10 technicians and about 20–45 ms at the largest setting (40 technicians, 80 requests), against about 5–11 ms for greedy and 12–30 ms for regret.</p></div>
-  <div class="note warn"><p><b>In routed mode, regret wins on average.</b> Once jobs are driven in order, a job's true cost depends on the other jobs on the same route, which an assignment matrix cannot represent. Cheapest insertion prices this directly. Regret averaged 1.2% to 3.0% below Hungarian-with-repair, and greedy was within about 1% of it (Section 11.5). On the default scenario with road distances, greedy cost 267.3, regret 268.0, and Hungarian 318.1.</p></div>
+  <div class="note good"><p><b>Hungarian wins on total cost in every scenario.</b> It solves the full assignment exactly, so no plan satisfying the same constraints has a lower cost under the same weights; with <i>Always serve P5</i> on, it is optimal among plans that serve the most priority-5 requests. It remains fast at the sizes supported: 1–3 ms for 10 technicians and about 20–45 ms at the largest setting (40 technicians, 80 requests), against about 5–11 ms for greedy and 12–30 ms for regret.</p></div>
   <table>
     <tr><th></th><th>Greedy</th><th>Hungarian</th><th>Regret</th></tr>
-    <tr><td><b>Matches optimum when</b></td><td>Each request has an obvious technician; almost all technicians are specialists.</td><td>Always in job-count mode; not in routed mode.</td><td>Capacity is plentiful and requests of equal priority compete for the same technician (8.1).</td></tr>
+    <tr><td><b>Matches optimum when</b></td><td>Each request has an obvious technician; almost all technicians are specialists.</td><td>Always.</td><td>Capacity is plentiful and requests of equal priority compete for the same technician (8.1).</td></tr>
     <tr><td><b>Loses most when</b></td><td>Technicians are flexible and demand is moderate to heavy.</td><td>—</td><td>Technicians are flexible (14.8% at scarcity 0.10); at extreme scarcity it behaves like greedy.</td></tr>
     <tr><td><b>Characteristic failure</b></td><td>Uses a flexible technician on a job that had a backup (8.1).</td><td>With <i>Always serve P5</i> off, faithfully optimizes poorly chosen weights (8.5).</td><td>Never revisits a choice, so its ordering can still use up a shared skill a later request needed (11.3).</td></tr>
     <tr><td><b>Explanation style</b></td><td>Simplest: best technician still free.</td><td>Whole-plan: kept for another request.</td><td>Ordering: highest priority, then most to lose if delayed.</td></tr>
-    <tr><td><b>Best used for</b></td><td>Immediate, one-at-a-time decisions.</td><td>Planning a known batch of requests in job-count or minutes mode.</td><td>A fast fallback that is better than greedy on average, and the best of the three in routed mode.</td></tr>
+    <tr><td><b>Best used for</b></td><td>Immediate, one-at-a-time decisions.</td><td>Planning a known batch of requests.</td><td>A fast fallback that is better than greedy on average.</td></tr>
   </table>
-  <p><b>Recommended use:</b> Hungarian for the planned batch in job-count or minutes mode; regret when routes must be drivable (routed mode); greedy for decisions that must be made instantly. Regret beats greedy on average at every demand level tested, but not in every individual scenario.</p>
+  <p><b>Recommended use:</b> Hungarian for the planned batch; greedy for decisions that must be made instantly; regret where a simple, explainable heuristic is wanted and Hungarian is not available. Regret beats greedy on average at every demand level tested, but not in every individual scenario.</p>
 </section>
 
 <!-- 13 -->
@@ -598,30 +538,26 @@ total cost        = Σ assignment costs  +  Σ unserved penalties</pre>
 <!-- 14 -->
 <section id="tests">
   <h2>14. Test suite</h2>
-  <p>68 automated tests: 54 backend (<code>pytest</code>), 9 frontend unit (<code>npm test</code>, Vitest), and 5 browser (<code>npm run test:e2e</code>, Playwright). All pass from a fresh copy of the repository. Backend tests replace OSRM with a deterministic fake (road = straight × 1.3), so they run without internet.</p>
+  <p>57 automated tests: 45 backend (<code>pytest</code>), 9 frontend unit (<code>npm test</code>, Vitest), and 3 browser (<code>npm run test:e2e</code>, Playwright). All pass from a fresh copy of the repository. Backend tests replace OSRM with a deterministic fake (road = straight × 1.3), so they run without internet.</p>
   <table>
     <tr><th>Area</th><th>What is verified</th></tr>
     <tr><td>Optimality</td><td>Hungarian equals an exhaustive brute-force search on 30 small scenarios at three weight settings. With <i>Always serve P5</i> on, the search minimizes priority-5 misses first, then cost. Hungarian is never worse than greedy or regret on 60 larger scenarios, and strictly better on the trap.</td></tr>
     <tr><td>Hard constraints</td><td>Across 25 seeds, every assignment satisfies skill, capacity, arrival, and shift end; every request is accounted for once. Shift-end, early-arrival, capacity, skill, and 40 km/h cases tested individually.</td></tr>
-    <tr><td>Working minutes</td><td>The hand case in Section 8.9, including each algorithm's explanation. Across 20 seeds, every algorithm keeps every technician inside his shift length and job limit, and the mode does bind in some scenarios.</td></tr>
     <tr><td>Case studies</td><td>The trap (8.1), regret under overload (8.4), the tie (8.3), priority-based dropping (8.7), leaving a request open on purpose (8.8), and skill gaps alone and mixed into a scenario (8.6).</td></tr>
     <tr><td>Weights and policy</td><td>With <i>Always serve P5</i> off, the 5 / 2 / 5 setting changes only Hungarian's plan; with it on, Hungarian serves both trap requests. A priority-5 request is served at any penalty when protected. A lower unassigned weight leaves more requests open in greedy and regret. Scaling all weights preserves every plan; the balance weight spreads jobs in all three; Hungarian fills cheaper slots first.</td></tr>
-    <tr><td>Regret</td><td>Ranks priority before regret. The incremental version gives exactly the same plans as recomputing every option each round: 15 seeds, two weight settings, all three capacity modes.</td></tr>
-    <tr><td>Routed mode</td><td>Both hand cases in Section 8.10, including explanations and stop numbers. Across 15 seeds, every algorithm's routes can be driven within windows and shifts, stops are numbered 1, 2, 3, …, and the reported kilometres equal the route lengths.</td></tr>
+    <tr><td>Regret</td><td>Ranks priority before regret. Updating only the chosen technician's options gives exactly the same plans as recomputing every option each round: 15 seeds and two weight settings.</td></tr>
     <tr><td>Distances</td><td>OSRM is used when requested, with one table request for a small scenario, and three block requests plus caching for a 120-point scenario. On a timeout, the fallback to straight line × 1.35 is reported in the note. A pair with no road route falls back for that pair only. The detour factor scales costs as expected.</td></tr>
     <tr><td>Metrics</td><td>Kilometres, averages, coverage, workload spread, urgent kilometres, and gap match hand calculations on the trap.</td></tr>
     <tr><td>Explanations</td><td>Each algorithm's explanation text names the correct reason and runner-up.</td></tr>
     <tr><td>Generator</td><td>Same seed gives an identical scenario; across 100 seeds at extreme scarcity, requests only require skills the workforce has; empty request list handled.</td></tr>
     <tr><td>Repeatability and scale</td><td>Identical results on repeated runs; 40 technicians and 80 requests complete within limits and remain valid.</td></tr>
-    <tr><td>API</td><td>All endpoints end to end; capacity mode and the priority-5 setting accepted; the distance source defaults to OSRM; invalid inputs (0 or 41 technicians, 81 requests, scarcity 1.5, priority 6, no skills, negative weight, unknown capacity mode or distance source) rejected with HTTP 422.</td></tr>
+    <tr><td>API</td><td>All endpoints end to end; the priority-5 setting accepted; the distance source defaults to OSRM; an unknown field and an unknown distance source are rejected; other invalid inputs (0 or 41 technicians, 81 requests, scarcity 1.5, priority 6, no skills, negative weight) are rejected with HTTP 422.</td></tr>
     <tr><td>Frontend unit</td><td>Every metric column has a label, direction, hover description, and API field; formatting; best-value highlighting; skill labels.</td></tr>
     <tr><td>Browser (Playwright)</td><td>Against the running API and UI in Chromium:
       <ul>
         <li>The default scenario states its distance source (road distances from OSRM, or the fallback notice).</li>
-        <li>Three maps render, and the trap on straight-line distances shows 150.3 / 6.3 / 6.3 with the correct explanation under each map.</li>
+        <li>Three maps render, and the trap on straight line × 1.35 shows 150.3 / 8.5 / 8.5 with the correct explanation under each map.</li>
         <li>With weights 5 / 2 / 5, unticking <i>Always serve P5</i> changes Hungarian's plan as in Section 8.5.</li>
-        <li>Switching to working minutes reallocates without errors.</li>
-        <li>Switching to routed mode shows route explanations ("adding … km to his route").</li>
       </ul></td></tr>
   </table>
 </section>
@@ -632,10 +568,10 @@ total cost        = Σ assignment costs  +  Σ unserved penalties</pre>
   <p>Setup commands for Windows, macOS, and Linux are in <code>README.md</code>. In short: start the API with <code>uvicorn app.main:app --port 8000</code> (with <code>PYTHONPATH=backend</code>), start the UI with <code>npm install</code> and <code>npm run dev</code> in <code>frontend</code>, and open <code>http://localhost:5173</code>.</p>
   <ol>
     <li><b>Reference cards</b> at the top list the skills, request attributes, and the role of each control.</li>
-    <li><b>Controls</b> (Section 9): scenario controls build a new scenario; weight sliders, the <i>Capacity</i> and <i>Distance source</i> selectors, and the <i>Always serve P5</i> checkbox rerun the current one; the note under the scenario states which distances were used; <i>Load trap scenario</i> loads Section 8.1.</li>
+    <li><b>Controls</b> (Section 9): scenario controls build a new scenario; weight sliders, the <i>Distance source</i> selector, and the <i>Always serve P5</i> checkbox rerun the current one; the note under the scenario states which distances were used; <i>Load trap scenario</i> loads Section 8.1.</li>
     <li><b>Metrics table</b>: one column per algorithm; best value per row highlighted; hover for definitions.</li>
     <li><b>"Who fails here" panel</b>: a live summary of each algorithm's cost, urgent misses, and gap on the current scenario.</li>
-    <li><b>Three maps</b>: large dots are technicians, with their colour reused on their assignment lines; request dots grow with priority; filled green is served, hollow red is unserved, amber is a skill gap. In routed mode, lines join each technician's home and stops in visiting order.</li>
+    <li><b>Three maps</b>: large dots are technicians, with their colour reused on their assignment lines; request dots grow with priority; filled green is served, hollow red is unserved, amber is a skill gap. Each assignment is a line from the technician's home to the job.</li>
     <li><b>Explanations</b>: selecting a request on a map or in the request list shows each algorithm's reason beneath its map.</li>
   </ol>
 </section>
@@ -646,36 +582,23 @@ total cost        = Σ assignment costs  +  Σ unserved penalties</pre>
   <h3>16.1 Assumptions</h3>
   <ul>
     <li>All requests for the planning period are known before planning starts.</li>
-    <li>Technicians start from home at shift start. Travel uses road distances (OSRM by default) at an average 40 km/h.</li>
-    <li>In routed mode, a route ends at the last job; the drive home is not counted.</li>
+    <li>Technicians start from home at shift start. Travel uses road distances (OSRM by default) at an average 40 km/h. Each job is priced from home; jobs are not driven in order.</li>
     <li>A technician is equally capable in each of his skills.</li>
     <li>Data are synthetic but realistic: real Bengaluru localities, mixed shifts, skewed skill demand.</li>
   </ul>
-  <h3>16.2 Limitations addressed in this version</h3>
-  <table>
-    <tr><th>Former limitation</th><th>Change made</th><th>Evidence</th></tr>
-    <tr><td>Regret ranked by options, not priority, and failed under overload.</td><td>Regret ranks by priority first and applies regret within each priority level.</td><td>Section 8.4; overload gap 25.4% → 7.9% (Section 11.1).</td></tr>
-    <tr><td>Greedy and regret never left a servable request open, so they ignored the unassigned weight.</td><td>Both leave a request open when its cheapest option costs more than its penalty.</td><td>Section 8.8; tests on single cases and across seeds.</td></tr>
-    <tr><td>Poor weights could make the optimal plan drop urgent customers.</td><td><i>Always serve P5</i> setting, on by default, in all three algorithms.</td><td>Section 8.5; brute-force check with priority-5 misses minimized first.</td></tr>
-    <tr><td>Capacity was a job count, not hours.</td><td>Optional working-minutes mode: travel there and back plus work must fit in the shift length.</td><td>Sections 8.9 and 11.4; tests across 20 seeds.</td></tr>
-    <tr><td>Regret recomputed every option every round.</td><td>Options built once; only the chosen technician's entries updated.</td><td>300–400 ms → 12–16 ms at the largest setting; identical plans to the full recomputation (tested).</td></tr>
-    <tr><td>No automated full-page UI test.</td><td>Five Playwright browser tests against the running application.</td><td>Section 14.</td></tr>
-    <tr><td>Jobs were not sequenced into routes; each was priced and time-checked from home.</td><td>Optional routed mode. Greedy and regret use cheapest insertion; Hungarian is solved and then repaired until every route can be driven. Stops are numbered and drawn in order on the map.</td><td>Sections 7.5, 8.10, and 11.5; 8% to 19% of job-count technician-days could not be driven.</td></tr>
-    <tr><td>Distances were straight lines.</td><td>Road distances from OSRM by default, with straight line × 1.35 (measured median 1.32, rounded up) as an automatic, reported fallback, and straight line as an option.</td><td>Sections 8.11 and 11.6; tests with a fake OSRM, including timeout and blocked requests.</td></tr>
-  </table>
-  <h3>16.3 Remaining limitations and solutions</h3>
+  <h3>16.2 Limitations and proposed solutions</h3>
   <table>
     <tr><th>Limitation</th><th>Impact</th><th>Proposed solution</th></tr>
-    <tr><td>No exact solver for routed mode.</td><td>Hungarian-with-repair is beaten by the heuristics in about half of the scenarios (Section 11.5), so no algorithm gives a proven-best route plan.</td><td>Solve routed mode with a vehicle-routing solver with time windows, such as OR-Tools, using the same distance table and cost.</td></tr>
+    <tr><td>Jobs are not sequenced into a route. Each job is priced and time-checked from home.</td><td>Two jobs for one technician can overlap in time, and the travel to a later job is measured from home rather than from the previous job.</td><td>Add a routing stage after the assignment, or solve the day as a vehicle-routing problem with time windows.</td></tr>
+    <tr><td>Capacity is a job count, not working time.</td><td>Three long jobs and three short jobs count the same, so a technician can be promised more work than his shift can hold.</td><td>Reject a job when drive there, work, and drive back would push his day past the shift length.</td></tr>
     <tr><td>Road distances depend on the public OSRM server.</td><td>It needs internet, is rate-limited (one request per second, so a first 40 × 80 fetch takes about 7 s), and can be unavailable; the engine then falls back to straight line × 1.35.</td><td>Host OSRM locally with the Bengaluru OpenStreetMap extract (free, Docker) and set <code>RAE_OSRM_URL</code> to it.</td></tr>
     <tr><td>Constant 40 km/h, no live traffic.</td><td>Peak-hour travel in Bengaluru is underestimated; the road distance is right, but the time is not.</td><td>Use OSRM durations, or time-of-day speed factors, instead of a constant speed.</td></tr>
-    <tr><td>Map lines are straight between stops.</td><td>Routes are measured on roads but drawn as straight lines.</td><td>Request route geometry from OSRM for the displayed plans.</td></tr>
+    <tr><td>Map lines are straight from home to each job.</td><td>The kilometres are road distances, so the drawn line is shorter than the trip that was priced.</td><td>Request the road geometry from OSRM for the displayed assignments.</td></tr>
     <tr><td>Batch planning only.</td><td>Requests arriving during the day are not handled.</td><td>Rolling horizon: greedy on arrival, periodic Hungarian over unstarted jobs, with a reassignment penalty (Section 13).</td></tr>
-    <tr><td>Hungarian is not exactly optimal in working-minutes mode.</td><td>A heuristic found a cheaper plan in 4 of 120 comparisons (Section 11.4).</td><td>Solve minutes mode as an integer program (for example OR-Tools CP-SAT) with a time budget per technician.</td></tr>
     <tr><td>Weights below priority 5 still decide what is dropped.</td><td>Priorities 1–4 can still be dropped by a poorly chosen unassigned weight.</td><td>Calibrate weights with operations staff; extend the protection to a configurable priority threshold if policy requires it.</td></tr>
     <tr><td>No skill proficiency or customer preference.</td><td>All qualified technicians are treated as equally suitable.</td><td>Add proficiency levels or preferred-technician bonuses as further soft constraints.</td></tr>
-    <tr><td>Hungarian scales as O(n³).</td><td>About 20–45 ms at the largest setting (about 100 ms in routed mode with re-solves); too slow at thousands of requests.</td><td>Use a min-cost-flow formulation or partition the city into regions.</td></tr>
-    <tr><td>Browser tests cover five main flows.</td><td>Map drawing details (line colours, marker sizes) are checked by eye, not by tests.</td><td>Add Playwright screenshot comparisons for the trap and the default scenario.</td></tr>
+    <tr><td>Hungarian scales as O(n³).</td><td>About 20–45 ms at the largest setting; too slow at thousands of requests.</td><td>Use a min-cost-flow formulation or partition the city into regions.</td></tr>
+    <tr><td>Browser tests cover three main flows.</td><td>Map drawing details (line colours, marker sizes) are checked by eye, not by tests.</td><td>Add Playwright screenshot comparisons for the trap and the default scenario.</td></tr>
   </table>
 </section>
 

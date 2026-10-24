@@ -13,7 +13,7 @@ function FitBounds({ points }) {
   return null;
 }
 
-function FieldServiceMap({ scenario, result, colors, selectedId, onSelect, routed }) {
+function FieldServiceMap({ scenario, result, colors, selectedId, onSelect }) {
   const byTech = useMemo(() => new Map(scenario.technicians.map((tech) => [tech.id, tech])), [scenario]);
   const byRequest = useMemo(() => new Map(scenario.requests.map((request) => [request.id, request])), [scenario]);
   const points = useMemo(
@@ -27,22 +27,7 @@ function FieldServiceMap({ scenario, result, colors, selectedId, onSelect, route
     <MapContainer center={[12.97, 77.59]} zoom={11} scrollWheelZoom={false}>
       <TileLayer attribution='&copy; OpenStreetMap' url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" />
       <FitBounds points={points} />
-      {routed && scenario.technicians.map((tech) => {
-        const stops = result.assignments
-          .filter((row) => row.technician_id === tech.id && row.stop)
-          .sort((a, b) => a.stop - b.stop)
-          .map((row) => byRequest.get(row.request_id))
-          .filter(Boolean);
-        if (!stops.length) return null;
-        return (
-          <Polyline
-            key={`${tech.id}-route`}
-            positions={[[tech.lat, tech.lng], ...stops.map((request) => [request.lat, request.lng])]}
-            pathOptions={{ color: colors.get(tech.id), weight: 3, opacity: 0.85 }}
-          />
-        );
-      })}
-      {!routed && result.assignments.map((row) => {
+      {result.assignments.map((row) => {
         if (!row.technician_id) return null;
         const tech = byTech.get(row.technician_id);
         const request = byRequest.get(row.request_id);
@@ -79,7 +64,7 @@ function FieldServiceMap({ scenario, result, colors, selectedId, onSelect, route
           >
             <Tooltip>
               {request.customer} · P{request.priority} · {skillLabel(request.required_skill)}
-              {gap ? " · skill gap" : served ? (row.stop ? ` · stop ${row.stop} for ${row.technician_name}` : "") : " · unassigned"}
+              {gap ? " · skill gap" : served ? "" : " · unassigned"}
             </Tooltip>
           </CircleMarker>
         );
@@ -88,7 +73,7 @@ function FieldServiceMap({ scenario, result, colors, selectedId, onSelect, route
   );
 }
 
-function Behavior({ response, capacity }) {
+function Behavior({ response }) {
   const greedy = response.results.greedy.metrics;
   const hungarian = response.results.hungarian.metrics;
   const regret = response.results.regret.metrics;
@@ -113,9 +98,7 @@ function Behavior({ response, capacity }) {
         </li>
         {[greedy, regret].some((metrics) => metrics.optimality_gap < -0.05) && (
           <li>
-            {capacity === "jobs"
-              ? "A negative gap means that algorithm left a priority-5 request open. Hungarian must serve every priority-5 request it can, so it pays more here."
-              : "In this capacity mode Hungarian is not guaranteed optimal, so a negative gap means that algorithm found a cheaper plan. Regret and greedy price each job where it falls in the route; Hungarian prices it from home and then repairs."}
+            A negative gap means that algorithm left a priority-5 request open. Hungarian must serve every priority-5 request it can, so it pays more here.
           </li>
         )}
         {shorterUrgent && (
@@ -141,7 +124,6 @@ export default function App() {
   const [seed, setSeed] = useState(1);
   const [scarcity, setScarcity] = useState(0.4);
   const [weights, setWeights] = useState({ w_distance: 1, w_balance: 2, w_unassigned: 30, must_serve_p5: true });
-  const [capacity, setCapacity] = useState("jobs");
   const [distance, setDistance] = useState("osrm");
   const [trap, setTrap] = useState(false);
   const [scenario, setScenario] = useState(null);
@@ -176,7 +158,6 @@ export default function App() {
             technicians: nextScenario.technicians,
             requests: nextScenario.requests,
             weights,
-            capacity,
             distance,
           }),
         });
@@ -191,7 +172,7 @@ export default function App() {
       }
     }, 300);
     return () => clearTimeout(handle);
-  }, [nTechs, nRequests, seed, scarcity, trap, weights, capacity, distance]);
+  }, [nTechs, nRequests, seed, scarcity, trap, weights, distance]);
 
   const colors = useMemo(() => {
     const map = new Map();
@@ -230,8 +211,8 @@ export default function App() {
             <li>Headcount, demand, scarcity, and seed build a new scenario. The same seed rebuilds the same scenario.</li>
             <li>Scarcity is the chance a technician has one skill instead of two. Higher scarcity means fewer people can cover a job.</li>
             <li>Distance weight makes kilometers matter more. Balance weight charges a technician for each job he already holds. Unassigned weight is the cost of leaving a job open, multiplied by priority. All three algorithms leave a job open when serving it would cost more than that.</li>
-            <li>Capacity: job count uses each technician's job limit. Working minutes also requires the drive there and back plus the work to fit inside his shift. Routed drives his jobs in order, home to job to job, and every stop must make its window.</li>
-            <li>Distance source: road distances from OSRM (OpenStreetMap) by default. If OSRM cannot be reached, straight line × 1.35 is used and the note above the table says so.</li>
+            <li>Each technician stops at his job limit: 2, 3, or 4 jobs.</li>
+            <li>Distance source: road distances from OSRM (OpenStreetMap) by default, or straight line × 1.35. If OSRM cannot be reached, straight line × 1.35 is used and the note above the table says so, in amber.</li>
             <li>Always serve P5: a priority-5 request is never left open while someone can still take it.</li>
           </ul>
         </article>
@@ -267,19 +248,10 @@ export default function App() {
           <input type="range" min="0" max="80" step="5" value={weights.w_unassigned} onChange={(event) => setWeights({ ...weights, w_unassigned: Number(event.target.value) })} />
         </label>
         <label>
-          Capacity
-          <select value={capacity} onChange={(event) => setCapacity(event.target.value)}>
-            <option value="jobs">Job count</option>
-            <option value="minutes">Working minutes</option>
-            <option value="routed">Routed (jobs in order)</option>
-          </select>
-        </label>
-        <label>
           Distance source
           <select value={distance} onChange={(event) => setDistance(event.target.value)}>
             <option value="osrm">Road (OSRM)</option>
             <option value="detour">Straight line × 1.35</option>
-            <option value="straight">Straight line</option>
           </select>
         </label>
         <label className="check">
@@ -324,7 +296,7 @@ export default function App() {
             </tbody>
           </table>
           <section className="metric-note">
-            <Behavior response={response} capacity={capacity} />
+            <Behavior response={response} />
           </section>
 
           <div className="maps">
@@ -341,7 +313,6 @@ export default function App() {
                     colors={colors}
                     selectedId={selectedId}
                     onSelect={setSelectedId}
-                    routed={capacity === "routed"}
                   />
                 </div>
                 <p className="reason">

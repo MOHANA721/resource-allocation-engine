@@ -18,7 +18,7 @@ from app.allocate import (
     run_regret,
     skill_gaps,
 )
-from app.constraints import check, job_minutes, pair_distance, shift_minutes
+from app.constraints import check, pair_distance
 from app.generator import generate, trap_scenario
 from app.main import app
 from app.models import Request, Technician, Weights
@@ -363,52 +363,9 @@ def test_largest_slider_setting_stays_fast_and_valid():
     assert outcome.results.hungarian.metrics.total_cost <= outcome.results.regret.metrics.total_cost + 1e-6
 
 
-def test_working_minutes_limit_the_day():
-    tech = _tech("ravi", 12.97, 77.59, shift=("08:00", "12:00"), max_jobs=4)
-    requests = [_request(f"r{index}", 12.9701, 77.59, duration=90) for index in range(3)]
-    assert check(tech, requests[0], 2, minutes_used=180.0) == (False, "hours")
-    assert check(tech, requests[0], 1, minutes_used=90.0) == (True, "ok")
-    by_jobs = allocate([tech], requests)
-    by_minutes = allocate([tech], requests, capacity="minutes")
-    for name in ALGORITHMS:
-        assert getattr(by_jobs.results, name).metrics.assigned_count == 3
-        assert getattr(by_minutes.results, name).metrics.assigned_count == 2
-    for name in ("greedy", "regret"):
-        missed = next(row for row in getattr(by_minutes.results, name).assignments if row.technician_id is None)
-        assert "run out of working time" in missed.explanation
-    missed = next(row for row in by_minutes.results.hungarian.assignments if row.technician_id is None)
-    assert "fully booked by job count or working time" in missed.explanation
-
-
-def test_minutes_mode_keeps_every_plan_inside_the_shift():
-    tighter = False
-    for seed in range(20):
-        scenario = generate(10, 30, seed=seed, scarcity=0.4)
-        techs = {tech.id: tech for tech in scenario.technicians}
-        requests = {request.id: request for request in scenario.requests}
-        by_jobs = allocate(scenario.technicians, scenario.requests)
-        by_minutes = allocate(scenario.technicians, scenario.requests, capacity="minutes")
-        for name in ALGORITHMS:
-            used: dict[str, float] = {}
-            count: dict[str, int] = {}
-            for row in getattr(by_minutes.results, name).assignments:
-                if row.technician_id is None:
-                    continue
-                tech = techs[row.technician_id]
-                used[tech.id] = used.get(tech.id, 0.0) + job_minutes(tech, requests[row.request_id])
-                count[tech.id] = count.get(tech.id, 0) + 1
-                assert check(tech, requests[row.request_id], 0)[0]
-            for tech_id, total in used.items():
-                assert total <= shift_minutes(techs[tech_id]) + 1e-9
-                assert count[tech_id] <= techs[tech_id].max_jobs
-            fewer = getattr(by_minutes.results, name).metrics.assigned_count
-            tighter = tighter or fewer < getattr(by_jobs.results, name).metrics.assigned_count
-    assert tighter
-
-
-def _regret_recomputed(techs, requests, weights, capacity):
+def _regret_recomputed(techs, requests, weights):
     """Regret without the incremental update: every option is rebuilt every round."""
-    load = _Load(techs, capacity)
+    load = _Load(techs)
     remaining = list(requests)
     decisions = {}
     while remaining:
@@ -432,23 +389,22 @@ def _regret_recomputed(techs, requests, weights, capacity):
     return _finish([decisions[request.id] for request in requests], techs, 0.0)
 
 
-@pytest.mark.parametrize("capacity", ["jobs", "minutes", "routed"])
 @pytest.mark.parametrize("weights", [Weights(), Weights(w_distance=2, w_balance=6, w_unassigned=4)])
-def test_incremental_regret_matches_recomputing_every_round(capacity, weights):
+def test_incremental_regret_matches_recomputing_every_round(weights):
     for seed in range(15):
         scenario = generate(10, 30, seed=seed, scarcity=0.5)
         live, _gaps = skill_gaps(scenario.technicians, scenario.requests)
-        fast = run_regret(scenario.technicians, live, weights, capacity)
-        slow = _regret_recomputed(scenario.technicians, live, weights, capacity)
+        fast = run_regret(scenario.technicians, live, weights)
+        slow = _regret_recomputed(scenario.technicians, live, weights)
         assert _pairs(fast) == _pairs(slow)
         assert fast.metrics.total_cost == pytest.approx(slow.metrics.total_cost)
 
 
-def test_api_capacity_mode():
+def test_api_accepts_weights_and_rejects_unknown_distance():
     scenario = client.get("/api/scenario/trap").json()
     body = {"technicians": scenario["technicians"], "requests": scenario["requests"]}
-    assert client.post("/api/allocate", json={**body, "capacity": "minutes"}).status_code == 200
-    assert client.post("/api/allocate", json={**body, "capacity": "hours"}).status_code == 422
+    assert client.post("/api/allocate", json={**body, "distance": "road"}).status_code == 422
+    assert client.post("/api/allocate", json={**body, "capacity": "minutes"}).status_code == 422
     unprotected = {"w_distance": 5, "w_balance": 2, "w_unassigned": 5, "must_serve_p5": False}
     response = client.post("/api/allocate", json={**body, "weights": unprotected}).json()
     assert response["results"]["hungarian"]["metrics"]["high_priority_unassigned_count"] == 1
