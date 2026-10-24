@@ -1,8 +1,9 @@
 """Correctness and comparison tests for the multi-job field service engine."""
 
+import pytest
 from fastapi.testclient import TestClient
 
-from app.allocate import allocate
+from app.allocate import UnofferedSkill, allocate
 from app.constraints import check
 from app.generator import generate, trap_scenario
 from app.main import app
@@ -32,7 +33,6 @@ def test_empty_request_list():
     result = allocate(scenario.technicians, scenario.requests)
     assert result.results.greedy.assignments == []
     assert result.results.greedy.metrics.priority_coverage == 1.0
-    assert result.skill_gaps == []
 
 
 def test_hard_constraints_hold_across_seeds():
@@ -127,7 +127,7 @@ def test_low_priority_is_dropped_when_capacity_is_short():
         assert pairs["minor"] is None
 
 
-def test_skill_gap_is_separate_from_algorithm_failure():
+def test_a_request_for_an_unoffered_skill_is_rejected():
     tech = Technician(
         id="ravi",
         name="Ravi",
@@ -151,10 +151,14 @@ def test_skill_gap_is_separate_from_algorithm_failure():
         duration=60,
         priority=4,
     )
-    outcome = allocate([tech], [gap])
-    assert [item.request_id for item in outcome.skill_gaps] == ["ac"]
-    assert outcome.results.greedy.assignments == []
-    assert outcome.results.greedy.metrics.unassigned_count == 0
+    with pytest.raises(UnofferedSkill, match="hvac"):
+        allocate([tech], [gap])
+    response = client.post(
+        "/api/allocate",
+        json={"technicians": [tech.model_dump()], "requests": [gap.model_dump()], "distance": "straight"},
+    )
+    assert response.status_code == 422
+    assert "hvac" in response.json()["detail"]
 
 
 def test_abundant_resources_tie():

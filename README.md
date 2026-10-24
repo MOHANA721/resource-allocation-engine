@@ -71,7 +71,7 @@ pytest
 - Every hard rule (skill, job limit, arrival time, shift end), and how each weight and setting changes each algorithm.
 - Distance sources: OSRM, the fallback on a timeout, block requests for large scenarios, and caching. OSRM is replaced by a fake, so the tests run offline.
 - That incremental regret gives the same plans as recomputing every round.
-- Metric values worked by hand on the trap, explanation text, skill gaps, and repeatability.
+- Metric values worked by hand on the trap, explanation text, and repeatability.
 - API input validation and the largest slider setting.
 
 The UI unit tests cover the metric table helpers (formatting, hover tips, and which value is marked best). The browser tests use Playwright. They start the API and the UI themselves, or reuse them if already running, then check the distance note, the trap, and the P5 checkbox in Chromium.
@@ -100,7 +100,7 @@ The sweeps use straight-line distances so they are reproducible offline. The fin
 
 ## Approach
 
-Technicians are generated first and never edited to fit demand. Request skills are drawn only from skills that workforce has, skewed toward HVAC and plumbing. A request whose skill nobody has is a skill gap and is excluded from the algorithm scores.
+Technicians are generated first and never edited to fit demand. Request skills are drawn only from skills that workforce has, skewed toward HVAC and plumbing. A request for a skill nobody has is rejected.
 
 Greedy sorts by priority, then earliest window close, and commits the cheapest feasible technician. Hungarian expands each technician into `max_jobs` slots. Slot k pays the balance cost of k jobs already held, and each request has a dummy column priced at the drop penalty, plus a large guard for protected priority-5 jobs. Regret takes the highest priority first; within a priority it serves the request with the largest gap between its best and second-best option. A request with only one feasible technician has infinite regret. Its option lists are built once and updated only for the technician just assigned.
 

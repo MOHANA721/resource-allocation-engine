@@ -48,23 +48,22 @@ function FieldServiceMap({ scenario, result, colors, selectedId, onSelect }) {
       {scenario.requests.map((request) => {
         const row = result.assignments.find((item) => item.request_id === request.id);
         const served = Boolean(row?.technician_id);
-        const gap = !row;
         return (
           <CircleMarker
             key={request.id}
             center={[request.lat, request.lng]}
             radius={4 + request.priority}
             pathOptions={{
-              color: selectedId === request.id ? "#111827" : gap ? "#b45309" : served ? "#166534" : "#b91c1c",
+              color: selectedId === request.id ? "#111827" : served ? "#166534" : "#b91c1c",
               weight: selectedId === request.id ? 3 : 2,
-              fillColor: gap ? "#f59e0b" : served ? "#86efac" : "#fecaca",
-              fillOpacity: served || gap ? 0.9 : 0.15,
+              fillColor: served ? "#86efac" : "#fecaca",
+              fillOpacity: served ? 0.9 : 0.15,
             }}
             eventHandlers={{ click: () => onSelect(request.id) }}
           >
             <Tooltip>
               {request.customer} · P{request.priority} · {skillLabel(request.required_skill)}
-              {gap ? " · skill gap" : served ? "" : " · unassigned"}
+              {served ? "" : " · unassigned"}
             </Tooltip>
           </CircleMarker>
         );
@@ -105,12 +104,6 @@ function Behavior({ response }) {
           <li>
             Greedy urgent travel is {money(greedy.urgent_assigned_km)} km against Hungarian {money(hungarian.urgent_assigned_km)} km,
             and greedy still has the higher total cost. The short trips are the ones that stole a scarce technician.
-          </li>
-        )}
-        {response.skill_gaps.length > 0 && (
-          <li>
-            {response.skill_gaps.length} request{response.skill_gaps.length === 1 ? "" : "s"} sit in the skill-gap list.
-            Nobody on this workforce has that skill, so none of the three algorithms is blamed for them.
           </li>
         )}
       </ul>
@@ -316,7 +309,7 @@ export default function App() {
                   />
                 </div>
                 <p className="reason">
-                  {selectedId ? response.results[algo.id].assignments.find((row) => row.request_id === selectedId)?.explanation || response.skill_gaps.find((gap) => gap.request_id === selectedId)?.reason || "Select a request." : "Select a request."}
+                  {selectedId ? response.results[algo.id].assignments.find((row) => row.request_id === selectedId)?.explanation || "Select a request." : "Select a request."}
                 </p>
               </section>
             ))}
@@ -325,7 +318,6 @@ export default function App() {
             <span><i className="swatch" style={{ background: "#0f766e" }} /> Technician, color reused on his lines</span>
             <span><i className="swatch" style={{ background: "#86efac" }} /> Served request, larger means higher priority</span>
             <span><i className="swatch" style={{ background: "#b91c1c" }} /> Left unassigned</span>
-            <span><i className="swatch" style={{ background: "#f59e0b" }} /> Skill gap</span>
           </p>
 
           <div className="roster">
@@ -351,14 +343,6 @@ export default function App() {
                   </li>
                 ))}
               </ul>
-              {response.skill_gaps.length > 0 && (
-                <>
-                  <h2>Skill gaps</h2>
-                  <ul>
-                    {response.skill_gaps.map((gap) => <li key={gap.request_id}>{gap.reason}</li>)}
-                  </ul>
-                </>
-              )}
             </article>
           </div>
         </>

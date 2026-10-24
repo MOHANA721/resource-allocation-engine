@@ -55,13 +55,6 @@ class Assignment(BaseModel):
     required_skill: str
 
 
-class SkillGap(BaseModel):
-    request_id: str
-    customer: str
-    required_skill: str
-    reason: str
-
-
 class Metrics(BaseModel):
     total_cost: float
     total_km: float
@@ -117,7 +110,6 @@ class AllocateResults(BaseModel):
 
 
 class AllocateResponse(BaseModel):
-    skill_gaps: list[SkillGap]
     results: AllocateResults
     distance_source: str = "straight"
     distance_note: str = "Straight-line distances."

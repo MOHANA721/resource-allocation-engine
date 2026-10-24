@@ -23,7 +23,6 @@ from app.models import (
     DistanceSource,
     Metrics,
     Request,
-    SkillGap,
     Technician,
     Weights,
 )
@@ -44,23 +43,15 @@ class _Load:
         self.jobs[tech.id] += 1
 
 
-def skill_gaps(techs: list[Technician], requests: list[Request]) -> tuple[list[Request], list[SkillGap]]:
+class UnofferedSkill(ValueError):
+    """A request asks for a skill nobody on this workforce has."""
+
+
+def _require_offered_skills(techs: list[Technician], requests: list[Request]) -> None:
     offered = {skill for tech in techs for skill in tech.skills}
-    live: list[Request] = []
-    gaps: list[SkillGap] = []
-    for request in requests:
-        if request.required_skill in offered:
-            live.append(request)
-            continue
-        gaps.append(
-            SkillGap(
-                request_id=request.id,
-                customer=request.customer,
-                required_skill=request.required_skill,
-                reason=f"Skill gap: nobody on this workforce has {request.required_skill}.",
-            )
-        )
-    return live, gaps
+    missing = sorted({request.required_skill for request in requests if request.required_skill not in offered})
+    if missing:
+        raise UnofferedSkill(f"No technician has {', '.join(missing)}.")
 
 
 def _metrics(assignments: list[Assignment], techs: list[Technician], started: float, clock) -> Metrics:
@@ -435,18 +426,17 @@ def allocate(
     """All three algorithms on one scenario. The API defaults ``distance`` to
     OSRM; this function defaults to straight line so direct calls work offline."""
     weights = weights or Weights()
-    live, gaps = skill_gaps(techs, requests)
-    points = [point(tech.lat, tech.lng) for tech in techs] + [point(request.lat, request.lng) for request in live]
+    _require_offered_skills(techs, requests)
+    points = [point(tech.lat, tech.lng) for tech in techs] + [point(request.lat, request.lng) for request in requests]
     table = build(points, distance)
     with using(table):
-        greedy = run_greedy(techs, live, weights)
-        hungarian = run_hungarian(techs, live, weights)
-        regret = run_regret(techs, live, weights)
+        greedy = run_greedy(techs, requests, weights)
+        hungarian = run_hungarian(techs, requests, weights)
+        regret = run_regret(techs, requests, weights)
     optimal = hungarian.metrics.total_cost
     for result in (greedy, hungarian, regret):
         result.metrics.optimality_gap = result.metrics.total_cost - optimal
     return AllocateResponse(
-        skill_gaps=gaps,
         results=AllocateResults(greedy=greedy, hungarian=hungarian, regret=regret),
         distance_source=table.source,
         distance_note=table.note,

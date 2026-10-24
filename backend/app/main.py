@@ -1,9 +1,9 @@
 """FastAPI routes for generated scenarios and side-by-side assignment."""
 
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.allocate import allocate
+from app.allocate import UnofferedSkill, allocate
 from app.generator import generate, trap_scenario
 from app.models import AllocateRequest, AllocateResponse, GenerateRequest, Scenario
 
@@ -44,4 +44,7 @@ def trap() -> Scenario:
 
 @app.post("/api/allocate", response_model=AllocateResponse)
 def allocate_route(body: AllocateRequest) -> AllocateResponse:
-    return allocate(body.technicians, body.requests, body.weights, body.distance)
+    try:
+        return allocate(body.technicians, body.requests, body.weights, body.distance)
+    except UnofferedSkill as error:
+        raise HTTPException(status_code=422, detail=str(error)) from error

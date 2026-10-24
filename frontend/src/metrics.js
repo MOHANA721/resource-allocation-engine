@@ -15,13 +15,13 @@ export const METRIC_COLUMNS = [
     id: "assigned",
     label: "Assigned",
     better: "high",
-    tip: "Requests a technician took. Skill-gap requests are left out of this count.",
+    tip: "Requests a technician took.",
   },
   {
     id: "unassigned",
     label: "Unassigned",
     better: "low",
-    tip: "Requests the algorithm left open. A skill nobody has is listed separately and is not counted here.",
+    tip: "Requests the algorithm left open.",
   },
   {
     id: "coverage",

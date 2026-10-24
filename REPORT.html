@@ -144,7 +144,7 @@
     <tr><td><code>priority</code></td><td>5</td><td>1 to 5. Scales the penalty for leaving the request unserved.</td></tr>
   </table>
   <h3>3.3 Assignment and result</h3>
-  <p>For each request, each algorithm returns an assignment containing the technician (or none), the distance, the cost charged, and a plain-language explanation. Each algorithm also returns a set of metrics (<a href="#metrics">Section 10</a>). Requests whose skill no technician has are returned separately as <b>skill gaps</b>.</p>
+  <p>For each request, each algorithm returns an assignment containing the technician (or none), the distance, the cost charged, and a plain-language explanation. Each algorithm also returns a set of metrics (<a href="#metrics">Section 10</a>). Every request asks for a skill at least one technician has.</p>
 </section>
 
 <!-- 4 -->
@@ -154,7 +154,7 @@
     <div><b>1. Configure</b>The user sets headcount, demand, scarcity, and seed in the UI.</div>
     <div><b>2. Generate</b><code>POST /api/scenario</code> builds the workforce first, then requests drawn from that workforce's skills.</div>
     <div><b>3. Allocate</b><code>POST /api/allocate</code> receives the scenario, the three cost weights, the priority-5 setting, and the distance source.</div>
-    <div><b>4. Solve</b>Skill gaps are separated; one distance table is built (road distances from OSRM, cached); greedy, Hungarian, and regret solve the same remaining requests with it.</div>
+    <div><b>4. Solve</b>One distance table is built (road distances from OSRM, cached); greedy, Hungarian, and regret solve the same requests with it.</div>
     <div><b>5. Present</b>The UI shows the metrics table, three maps, and per-request explanations.</div>
   </div>
   <h3>4.1 API</h3>
@@ -163,13 +163,13 @@
     <tr><td><code>GET /api/health</code></td><td>—</td><td>Liveness check.</td></tr>
     <tr><td><code>POST /api/scenario</code></td><td><code>n_techs</code> (1–40), <code>n_requests</code> (0–80), <code>seed</code>, <code>scarcity</code> (0–1)</td><td>Technicians and requests.</td></tr>
     <tr><td><code>GET /api/scenario/trap</code></td><td>—</td><td>The hand-built case in Section 8.1.</td></tr>
-    <tr><td><code>POST /api/allocate</code></td><td>Technicians, requests, <code>weights</code> (<code>w_distance</code>, <code>w_balance</code>, <code>w_unassigned</code>, <code>must_serve_p5</code>), <code>distance</code> (<code>osrm</code> by default, or <code>detour</code> for straight line × 1.35)</td><td>Skill gaps; assignments and metrics for each algorithm; <code>distance_source</code> and <code>distance_note</code> stating which distances were actually used.</td></tr>
+    <tr><td><code>POST /api/allocate</code></td><td>Technicians, requests, <code>weights</code> (<code>w_distance</code>, <code>w_balance</code>, <code>w_unassigned</code>, <code>must_serve_p5</code>), <code>distance</code> (<code>osrm</code> by default, or <code>detour</code> for straight line × 1.35)</td><td>Assignments and metrics for each algorithm; <code>distance_source</code> and <code>distance_note</code> stating which distances were actually used. A request for a skill nobody has is rejected with HTTP 422.</td></tr>
   </table>
   <h3>4.2 Design decisions</h3>
   <ul>
     <li><b>Reproducibility.</b> All randomness uses <code>random.Random(seed)</code>; identical settings always produce an identical scenario.</li>
     <li><b>Fixed workforce.</b> Technicians are generated first and never altered to fit demand, as in a real company.</li>
-    <li><b>Honest metrics.</b> A request needing a skill nobody has is reported as a skill gap and excluded from every algorithm's score, so "unserved" always reflects an algorithm's decision rather than impossible data.</li>
+    <li><b>Honest metrics.</b> Every request uses a skill the workforce has, so "unserved" always reflects an algorithm's decision.</li>
     <li><b>Fair comparison.</b> One API call runs all three algorithms on the identical input with the identical rules, cost, and distance table.</li>
     <li><b>Road distances without a key.</b> The public OSRM server returns a full distance table in one request for up to 100 points. Larger scenarios are fetched in blocks of 50, so a 120-point scenario takes 3 requests. Results are cached, so moving a weight slider does not refetch. If OSRM is unreachable, the engine uses straight line × 1.35 and says so.</li>
     <li><b>Offline tests.</b> The tests replace the OSRM call with a deterministic fake, so they run without internet and give the same numbers every time.</li>
@@ -181,7 +181,7 @@
     <tr><td><code>backend/app/generator.py</code></td><td>Seeded scenario generator and the trap scenario.</td></tr>
     <tr><td><code>backend/app/distances.py</code></td><td>Distance sources: OSRM road table (blocked, cached, throttled to one request per second) and the 1.35 detour factor.</td></tr>
     <tr><td><code>backend/app/constraints.py</code></td><td>Travel time, hard-constraint check, cost and penalty.</td></tr>
-    <tr><td><code>backend/app/allocate.py</code></td><td>Skill gaps, the three algorithms, explanations, metrics.</td></tr>
+    <tr><td><code>backend/app/allocate.py</code></td><td>The three algorithms, explanations, and metrics. A request for a skill nobody has is rejected.</td></tr>
     <tr><td><code>backend/app/main.py</code></td><td>FastAPI routes and CORS.</td></tr>
     <tr><td><code>backend/experiments.py</code></td><td>Parameter sweeps behind Section 11.</td></tr>
     <tr><td><code>frontend/src/App.jsx</code>, <code>metrics.js</code></td><td>UI, maps, controls, metric table helpers.</td></tr>
@@ -281,7 +281,7 @@ total cost        = Σ assignment costs  +  Σ unserved penalties</pre>
 <!-- 8 -->
 <section id="cases">
   <h2>8. Case studies</h2>
-  <p>Each case is small enough to verify by hand. All figures are produced by the engine and most are asserted in the test suite. Cases 8.1 to 8.8 give the hand-checked kilometres for each assignment. The screen offers road distances and straight line × 1.35. Case 8.9 shows how those two change the figures.</p>
+  <p>Each case is small enough to verify by hand. All figures are produced by the engine and most are asserted in the test suite. Cases 8.1 to 8.7 give the hand-checked kilometres for each assignment. The screen offers road distances and straight line × 1.35. Case 8.8 shows how those two change the figures.</p>
 
   <div class="case">
     <h3>8.1 Greedy strands a specialist (the "trap" scenario)</h3>
@@ -369,19 +369,13 @@ total cost        = Σ assignment costs  +  Σ unserved penalties</pre>
   </div>
 
   <div class="case">
-    <h3>8.6 Skill gap</h3>
-    <p><span class="lbl">Setup</span>An HVAC request is added to a workforce with no HVAC technician.</p>
-    <p><span class="lbl">Result</span>The request is listed separately: <i>"Skill gap: nobody on this workforce has hvac."</i> It is excluded from all three algorithms' metrics; their results on the remaining requests are unchanged. A skill gap is a hiring problem, not an algorithm failure.</p>
-  </div>
-
-  <div class="case">
-    <h3>8.7 Priority decides what is dropped under scarcity</h3>
+    <h3>8.6 Priority decides what is dropped under scarcity</h3>
     <p><span class="lbl">Setup</span>One plumber with capacity 1; a priority-5 and a priority-1 plumbing request, both reachable.</p>
     <p><span class="lbl">Result</span>All three algorithms serve the priority-5 request and leave the priority-1 request unserved (penalty 30 rather than 150).</p>
   </div>
 
   <div class="case">
-    <h3>8.8 Leaving an uneconomic request open on purpose</h3>
+    <h3>8.7 Leaving an uneconomic request open on purpose</h3>
     <p><span class="lbl">Setup</span>One plumber, Ravi, and one priority-1 plumbing request about 25 km away. Serving it costs 25.0 at the default distance weight.</p>
     <table>
       <tr><th>Unassigned weight</th><th class="num">Penalty for P1</th><th>Greedy</th><th>Hungarian</th><th>Regret</th></tr>
@@ -393,7 +387,7 @@ total cost        = Σ assignment costs  +  Σ unserved penalties</pre>
   </div>
 
   <div class="case">
-    <h3>8.9 Road distances and straight line × 1.35</h3>
+    <h3>8.8 Road distances and straight line × 1.35</h3>
     <p><span class="lbl">Setup</span>The same two scenarios solved with each distance source on the screen. OSRM values are the real Bengaluru road network at the time of writing.</p>
     <table>
       <tr><th>Scenario</th><th>Distance source</th><th class="num">Greedy</th><th class="num">Hungarian</th><th class="num">Regret</th></tr>
@@ -423,7 +417,7 @@ total cost        = Σ assignment costs  +  Σ unserved penalties</pre>
   <p>Changing these reruns all three algorithms on the same scenario.</p>
   <table>
     <tr><th>Control</th><th>Options (default)</th><th>Effect</th><th>Significance</th></tr>
-    <tr><td>Distance source</td><td>Road (OSRM), Straight line × 1.35 (Road)</td><td>Sets how kilometres between two points are measured. Road distances come from the public OSRM server; if it is unreachable, straight line × 1.35 is used and the note under the scenario says so, in amber.</td><td>Accuracy. Road distances reflect the road network. Straight line × 1.35 is the offline stand-in, and the automatic fallback (Section 8.9).</td></tr>
+    <tr><td>Distance source</td><td>Road (OSRM), Straight line × 1.35 (Road)</td><td>Sets how kilometres between two points are measured. Road distances come from the public OSRM server; if it is unreachable, straight line × 1.35 is used and the note under the scenario says so, in amber.</td><td>Accuracy. Road distances reflect the road network. Straight line × 1.35 is the offline stand-in, and the automatic fallback (Section 8.8).</td></tr>
     <tr><td>Always serve P5 when possible</td><td>on / off (on)</td><td>A priority-5 request is never left open on purpose (Section 6.1).</td><td>Safety net. Protects urgent customers from badly chosen weights (Section 8.5).</td></tr>
   </table>
   <h3>9.3 Cost weights</h3>
@@ -432,7 +426,7 @@ total cost        = Σ assignment costs  +  Σ unserved penalties</pre>
     <tr><th>Weight</th><th>Range (default)</th><th>Raising it</th><th>Lowering it</th></tr>
     <tr><td>Distance</td><td>0–5 (1)</td><td>Nearer technicians are preferred; distant low-priority requests become more likely to be left unserved, by all three algorithms.</td><td>Travel becomes cheap; longer trips are accepted to serve more requests.</td></tr>
     <tr><td>Balance</td><td>0–10 (2)</td><td>Work is spread across technicians; busy technicians are passed over.</td><td>The nearest technician takes jobs up to his capacity.</td></tr>
-    <tr><td>Unassigned</td><td>0–80 (30)</td><td>Leaving a request unserved becomes expensive; all three serve more requests, even far ones.</td><td>Leaving requests unserved becomes cheap; all three drop more (Section 8.8). Urgent ones are dropped only if <i>Always serve P5</i> is off (Section 8.5).</td></tr>
+    <tr><td>Unassigned</td><td>0–80 (30)</td><td>Leaving a request unserved becomes expensive; all three serve more requests, even far ones.</td><td>Leaving requests unserved becomes cheap; all three drop more (Section 8.7). Urgent ones are dropped only if <i>Always serve P5</i> is off (Section 8.5).</td></tr>
   </table>
   <h3>9.4 Which algorithm responds to which weight</h3>
   <table>
@@ -441,7 +435,7 @@ total cost        = Σ assignment costs  +  Σ unserved penalties</pre>
     <tr><td>Regret</td><td>Yes: they set the cheapest technician and the regret used for ordering.</td><td>Yes, as for greedy.</td></tr>
     <tr><td>Hungarian</td><td>Yes.</td><td>Yes: it sets the point at which leaving a request unserved is cheaper than serving it, judged over the whole plan.</td></tr>
   </table>
-  <p>At the default weights the unassigned weight rarely changes a choice; at low values it does (Section 8.8). These properties are asserted in the test suite. Scaling all three weights by the same factor leaves every plan unchanged and scales every total by that factor.</p>
+  <p>At the default weights the unassigned weight rarely changes a choice; at low values it does (Section 8.7). These properties are asserted in the test suite. Scaling all three weights by the same factor leaves every plan unchanged and scales every total by that factor.</p>
   <div class="note warn"><p><b>Recommendation.</b> Set the weights from business policy first (for example, "how many kilometres of travel is one unserved priority-5 customer worth?"), then compare algorithms. All three are always scored with the same weights, so the comparison remains fair at any setting.</p></div>
 </section>
 
@@ -453,8 +447,8 @@ total cost        = Σ assignment costs  +  Σ unserved penalties</pre>
     <tr><th>Metric</th><th>Definition</th><th>Importance</th></tr>
     <tr><td><b>Total cost</b></td><td>Sum of assignment costs and unserved penalties.</td><td>The objective. It combines travel, workload, and service in stated proportions.</td></tr>
     <tr><td><b>Gap vs Hungarian</b></td><td>Algorithm's total cost minus Hungarian's.</td><td>Cost of not optimizing. Zero means the algorithm matched the optimum. A negative gap means the algorithm left open a priority-5 request that Hungarian was required to serve (Section 8.5).</td></tr>
-    <tr><td>Assigned</td><td>Requests served (skill gaps excluded).</td><td>Customers who receive a visit.</td></tr>
-    <tr><td>Unassigned</td><td>Requests left unserved (skill gaps excluded).</td><td>Customers who do not; read together with which priorities they had.</td></tr>
+    <tr><td>Assigned</td><td>Requests served.</td><td>Customers who receive a visit.</td></tr>
+    <tr><td>Unassigned</td><td>Requests left unserved.</td><td>Customers who do not; read together with which priorities they had.</td></tr>
     <tr><td>Coverage</td><td>Assigned ÷ servable requests.</td><td>Service level as a percentage, comparable across scenario sizes.</td></tr>
     <tr><td>Kilometres</td><td>Travel over served requests, measured from each technician's home.</td><td>Fuel and time. An unserved request adds zero, so fewer kilometres can indicate fewer visits.</td></tr>
     <tr><td>Average km</td><td>Kilometres ÷ served requests.</td><td>Typical trip length.</td></tr>
@@ -503,7 +497,7 @@ total cost        = Σ assignment costs  +  Σ unserved penalties</pre>
   </table>
   <p>Hungarian serves every request and travels 25.5 km less than greedy. Regret leaves one priority-1 plumbing request unserved: by the time it reaches that request, every plumber is full. Regret beats greedy on average (Sections 11.1 and 11.2) but not in every scenario, and this default scenario is one where it loses. Urgent kilometres are lowest for greedy and regret, yet both cost more than Hungarian, which is why kilometres alone would pick the wrong winner.</p>
   <h3>11.4 Distance sources</h3>
-  <p>Section 8.9 gives the effect on the trap and default scenarios. Over 2,944 point pairs more than 0.5 km apart, taken from three default-sized scenarios (seeds 1–3), the median ratio of OSRM road distance to straight-line distance is 1.32. The fallback factor 1.35 rounds this up slightly, so that the fallback leans towards overestimating travel. The first OSRM fetch for a 40 × 80 scenario took about 7 s, mostly the required one-second spacing between requests to the public server. Afterwards it took about 0.2 s, because results are cached for every later run of that scenario, such as moving a slider.</p>
+  <p>Section 8.8 gives the effect on the trap and default scenarios. Over 2,944 point pairs more than 0.5 km apart, taken from three default-sized scenarios (seeds 1–3), the median ratio of OSRM road distance to straight-line distance is 1.32. The fallback factor 1.35 rounds this up slightly, so that the fallback leans towards overestimating travel. The first OSRM fetch for a 40 × 80 scenario took about 7 s, mostly the required one-second spacing between requests to the public server. Afterwards it took about 0.2 s, because results are cached for every later run of that scenario, such as moving a slider.</p>
 </section>
 
 <!-- 12 -->
@@ -536,12 +530,12 @@ total cost        = Σ assignment costs  +  Σ unserved penalties</pre>
 <!-- 14 -->
 <section id="tests">
   <h2>14. Test suite</h2>
-  <p>57 automated tests: 45 backend (<code>pytest</code>), 9 frontend unit (<code>npm test</code>, Vitest), and 3 browser (<code>npm run test:e2e</code>, Playwright). All pass from a fresh copy of the repository. Backend tests replace OSRM with a deterministic fake (road = straight × 1.3), so they run without internet.</p>
+  <p>56 automated tests: 44 backend (<code>pytest</code>), 9 frontend unit (<code>npm test</code>, Vitest), and 3 browser (<code>npm run test:e2e</code>, Playwright). All pass from a fresh copy of the repository. Backend tests replace OSRM with a deterministic fake (road = straight × 1.3), so they run without internet.</p>
   <table>
     <tr><th>Area</th><th>What is verified</th></tr>
     <tr><td>Optimality</td><td>Hungarian equals an exhaustive brute-force search on 30 small scenarios at three weight settings. With <i>Always serve P5</i> on, the search minimizes priority-5 misses first, then cost. Hungarian is never worse than greedy or regret on 60 larger scenarios, and strictly better on the trap.</td></tr>
     <tr><td>Hard constraints</td><td>Across 25 seeds, every assignment satisfies skill, capacity, arrival, and shift end; every request is accounted for once. Shift-end, early-arrival, capacity, skill, and 40 km/h cases tested individually.</td></tr>
-    <tr><td>Case studies</td><td>The trap (8.1), regret under overload (8.4), the tie (8.3), priority-based dropping (8.7), leaving a request open on purpose (8.8), and skill gaps alone and mixed into a scenario (8.6).</td></tr>
+    <tr><td>Case studies</td><td>The trap (8.1), regret under overload (8.4), the tie (8.3), priority-based dropping (8.6), and leaving a request open on purpose (8.7). A request for a skill nobody has is rejected.</td></tr>
     <tr><td>Weights and policy</td><td>With <i>Always serve P5</i> off, the 5 / 2 / 5 setting changes only Hungarian's plan; with it on, Hungarian serves both trap requests. A priority-5 request is served at any penalty when protected. A lower unassigned weight leaves more requests open in greedy and regret. Scaling all weights preserves every plan; the balance weight spreads jobs in all three; Hungarian fills cheaper slots first.</td></tr>
     <tr><td>Regret</td><td>Ranks priority before regret. Updating only the chosen technician's options gives exactly the same plans as recomputing every option each round: 15 seeds and two weight settings.</td></tr>
     <tr><td>Distances</td><td>OSRM is used when requested, with one table request for a small scenario, and three block requests plus caching for a 120-point scenario. On a timeout, the fallback to straight line × 1.35 is reported in the note. A pair with no road route falls back for that pair only. The detour factor scales costs as expected.</td></tr>
@@ -549,7 +543,7 @@ total cost        = Σ assignment costs  +  Σ unserved penalties</pre>
     <tr><td>Explanations</td><td>Each algorithm's explanation text names the correct reason and runner-up.</td></tr>
     <tr><td>Generator</td><td>Same seed gives an identical scenario; across 100 seeds at extreme scarcity, requests only require skills the workforce has; empty request list handled.</td></tr>
     <tr><td>Repeatability and scale</td><td>Identical results on repeated runs; 40 technicians and 80 requests complete within limits and remain valid.</td></tr>
-    <tr><td>API</td><td>All endpoints end to end; the priority-5 setting accepted; the distance source defaults to OSRM; an unknown field and an unknown distance source are rejected; other invalid inputs (0 or 41 technicians, 81 requests, scarcity 1.5, priority 6, no skills, negative weight) are rejected with HTTP 422.</td></tr>
+    <tr><td>API</td><td>All endpoints end to end; the priority-5 setting accepted; the distance source defaults to OSRM; an unknown field, an unknown distance source, and a request for a skill nobody has are rejected; other invalid inputs (0 or 41 technicians, 81 requests, scarcity 1.5, priority 6, no skills, negative weight) are rejected with HTTP 422.</td></tr>
     <tr><td>Frontend unit</td><td>Every metric column has a label, direction, hover description, and API field; formatting; best-value highlighting; skill labels.</td></tr>
     <tr><td>Browser (Playwright)</td><td>Against the running API and UI in Chromium:
       <ul>
@@ -569,7 +563,7 @@ total cost        = Σ assignment costs  +  Σ unserved penalties</pre>
     <li><b>Controls</b> (Section 9): scenario controls build a new scenario; weight sliders, the <i>Distance source</i> selector, and the <i>Always serve P5</i> checkbox rerun the current one; the note under the scenario states which distances were used; <i>Load trap scenario</i> loads Section 8.1.</li>
     <li><b>Metrics table</b>: one column per algorithm; best value per row highlighted; hover for definitions.</li>
     <li><b>"Who fails here" panel</b>: a live summary of each algorithm's cost, urgent misses, and gap on the current scenario.</li>
-    <li><b>Three maps</b>: large dots are technicians, with their colour reused on their assignment lines; request dots grow with priority; filled green is served, hollow red is unserved, amber is a skill gap. Each assignment is a line from the technician's home to the job.</li>
+    <li><b>Three maps</b>: large dots are technicians, with their colour reused on their assignment lines; request dots grow with priority; filled green is served, hollow red is unserved. Each assignment is a line from the technician's home to the job.</li>
     <li><b>Explanations</b>: selecting a request on a map or in the request list shows each algorithm's reason beneath its map.</li>
   </ol>
 </section>

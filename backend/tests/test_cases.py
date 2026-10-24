@@ -16,7 +16,6 @@ from app.allocate import (
     _regret_key,
     allocate,
     run_regret,
-    skill_gaps,
 )
 from app.constraints import check, pair_distance
 from app.generator import generate, trap_scenario
@@ -103,9 +102,8 @@ def _brute_force_cost(techs, requests, weights):
 def test_hungarian_matches_brute_force_on_small_scenarios(weights):
     for seed in range(30):
         scenario = generate(3, 5, seed=seed, scarcity=0.5)
-        live, _gaps = skill_gaps(scenario.technicians, scenario.requests)
         outcome = allocate(scenario.technicians, scenario.requests, weights)
-        expected_missed, expected_cost = _brute_force_cost(scenario.technicians, live, weights)
+        expected_missed, expected_cost = _brute_force_cost(scenario.technicians, scenario.requests, weights)
         hungarian = outcome.results.hungarian
         missed = sum(1 for row in hungarian.assignments if row.technician_id is None and row.priority == 5)
         if weights.must_serve_p5:
@@ -292,20 +290,6 @@ def test_explanations_name_the_real_reason():
     assert "already full" not in dropped.explanation
 
 
-def test_skill_gap_inside_a_normal_scenario():
-    scenario = trap_scenario()
-    gap = _request("ac", 12.94, 77.62, skill="hvac", priority=5)
-    plain = allocate(scenario.technicians, scenario.requests)
-    mixed = allocate(scenario.technicians, [*scenario.requests, gap])
-    assert [item.request_id for item in mixed.skill_gaps] == ["ac"]
-    assert "nobody on this workforce has hvac" in mixed.skill_gaps[0].reason
-    for name in ALGORITHMS:
-        result = getattr(mixed.results, name)
-        assert len(result.assignments) == 2
-        assert _pairs(result) == _pairs(getattr(plain.results, name))
-        assert result.metrics.total_cost == pytest.approx(getattr(plain.results, name).metrics.total_cost)
-
-
 def test_algorithms_are_repeatable():
     scenario = generate(12, 20, seed=7, scarcity=0.4)
     first = allocate(scenario.technicians, scenario.requests)
@@ -393,9 +377,8 @@ def _regret_recomputed(techs, requests, weights):
 def test_incremental_regret_matches_recomputing_every_round(weights):
     for seed in range(15):
         scenario = generate(10, 30, seed=seed, scarcity=0.5)
-        live, _gaps = skill_gaps(scenario.technicians, scenario.requests)
-        fast = run_regret(scenario.technicians, live, weights)
-        slow = _regret_recomputed(scenario.technicians, live, weights)
+        fast = run_regret(scenario.technicians, scenario.requests, weights)
+        slow = _regret_recomputed(scenario.technicians, scenario.requests, weights)
         assert _pairs(fast) == _pairs(slow)
         assert fast.metrics.total_cost == pytest.approx(slow.metrics.total_cost)
 
