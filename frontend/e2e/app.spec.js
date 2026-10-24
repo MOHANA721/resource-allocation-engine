@@ -42,13 +42,14 @@ test("trap scenario: greedy strands the electrician, Hungarian and regret serve 
 test("priority-5 checkbox decides whether Hungarian may drop the panel", async ({ page }) => {
   await loadTrap(page);
   await page.getByLabel(/Distance weight/).fill("5");
-  await page.getByLabel(/Unassigned weight/).fill("5");
+  await page.getByLabel(/Unassigned weight/).fill("7");
   await page.getByRole("button", { name: /Household panel/ }).click();
-  await expect(page.locator(".panel-head").nth(GREEDY)).toContainText("26.7 cost");
+  await expect(page.locator(".panel-head").nth(GREEDY)).toContainText("36.7 cost");
   const hungarian = page.locator(".reason").nth(HUNGARIAN);
   await expect(hungarian).toContainText("Vikram takes this job");
+  await expect(page.locator(".panel-head").nth(HUNGARIAN)).toContainText("42.3 cost");
 
   await page.getByLabel("Always serve P5 when possible").uncheck();
   await expect(hungarian).toContainText("left open in the minimum-cost plan");
-  await expect(page.locator(".panel-head").nth(HUNGARIAN)).toContainText("26.7 cost");
+  await expect(page.locator(".panel-head").nth(HUNGARIAN)).toContainText("36.7 cost");
 });

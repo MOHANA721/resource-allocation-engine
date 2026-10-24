@@ -1,4 +1,4 @@
-"""Distance sources: OSRM, detour, and straight line."""
+"""Distance sources: OSRM and straight line × 1.35."""
 
 import pytest
 from fastapi.testclient import TestClient
@@ -18,29 +18,39 @@ def _pairs(result):
     return {row.request_id: row.technician_id for row in result.assignments}
 
 
-def test_detour_scales_every_distance():
+def _haversine_km(tech, request) -> float:
+    return haversine_km(tech.lat, tech.lng, request.lat, request.lng)
+
+
+def test_detour_scales_every_served_trip():
     scenario = trap_scenario()
-    straight = allocate(scenario.technicians, scenario.requests, distance="straight")
+    techs = {tech.id: tech for tech in scenario.technicians}
+    requests = {request.id: request for request in scenario.requests}
     detour = allocate(scenario.technicians, scenario.requests, distance="detour")
-    assert straight.distance_source == "straight"
     assert detour.distance_source == "detour"
+    assert "× 1.35" in detour.distance_note
     for name in ALGORITHMS:
-        assert _pairs(getattr(detour.results, name)) == _pairs(getattr(straight.results, name))
-        assert getattr(detour.results, name).metrics.total_km == pytest.approx(
-            DETOUR_FACTOR * getattr(straight.results, name).metrics.total_km
-        )
+        for row in getattr(detour.results, name).assignments:
+            if row.technician_id is None:
+                continue
+            assert row.distance_km == pytest.approx(
+                DETOUR_FACTOR * _haversine_km(techs[row.technician_id], requests[row.request_id])
+            )
 
 
 def test_osrm_distances_are_used_when_available(fake_osrm):
     scenario = trap_scenario()
-    straight = allocate(scenario.technicians, scenario.requests, distance="straight")
+    techs = {tech.id: tech for tech in scenario.technicians}
+    requests = {request.id: request for request in scenario.requests}
     road = allocate(scenario.technicians, scenario.requests, distance="osrm")
     assert road.distance_source == "osrm"
     assert "Road distances from OSRM" in road.distance_note
     assert fake_osrm.calls == [4]
-    assert road.results.hungarian.metrics.total_km == pytest.approx(
-        FAKE_ROAD_FACTOR * straight.results.hungarian.metrics.total_km
+    served = [row for row in road.results.hungarian.assignments if row.technician_id]
+    expected = sum(
+        FAKE_ROAD_FACTOR * _haversine_km(techs[row.technician_id], requests[row.request_id]) for row in served
     )
+    assert road.results.hungarian.metrics.total_km == pytest.approx(expected)
 
 
 def test_unreachable_osrm_falls_back_to_detour(fake_osrm):
@@ -83,7 +93,8 @@ def test_api_defaults_to_osrm_and_validates_choices(fake_osrm):
     assert default["distance_source"] == "osrm"
     assert fake_osrm.calls
     calls = len(fake_osrm.calls)
-    straight = client.post("/api/allocate", json={**body, "distance": "straight"}).json()
-    assert straight["distance_source"] == "straight"
+    detour = client.post("/api/allocate", json={**body, "distance": "detour"}).json()
+    assert detour["distance_source"] == "detour"
     assert len(fake_osrm.calls) == calls
+    assert client.post("/api/allocate", json={**body, "distance": "straight"}).status_code == 422
     assert client.post("/api/allocate", json={**body, "distance": "road"}).status_code == 422

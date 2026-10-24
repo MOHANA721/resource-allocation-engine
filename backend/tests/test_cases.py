@@ -139,7 +139,7 @@ def test_capacity_rule_is_reported():
     assert check(_tech("ravi", 12.97, 77.59, skills=("hvac",)), request, 0) == (False, "skill")
 
 
-CHEAP_DROP = Weights(w_distance=5, w_balance=2, w_unassigned=5, must_serve_p5=False)
+CHEAP_DROP = Weights(w_distance=5, w_balance=2, w_unassigned=7, must_serve_p5=False)
 
 
 def test_trap_cheap_drops_change_only_hungarian_without_protection():
@@ -163,7 +163,7 @@ def test_priority_five_protection_fixes_cheap_drop_weights():
 
 def test_greedy_and_regret_leave_a_job_open_when_serving_costs_more():
     tech = _tech("ravi", 12.97, 77.59)
-    far = _request("far", 12.97 + 25 / 111, 77.59, window=("09:00", "16:00"), priority=1)
+    far = _request("far", 12.97 + 0.1665405, 77.59, window=("09:00", "16:00"), priority=1)
     dropped = allocate([tech], [far], Weights(w_unassigned=10))
     for name in ALGORITHMS:
         assert _pairs(getattr(dropped.results, name)) == {"far": None}
@@ -178,7 +178,7 @@ def test_greedy_and_regret_leave_a_job_open_when_serving_costs_more():
 
 def test_priority_five_is_served_even_when_the_penalty_is_small():
     tech = _tech("ravi", 12.97, 77.59)
-    far = _request("far", 12.97 + 25 / 111, 77.59, window=("09:00", "16:00"), priority=5)
+    far = _request("far", 12.97 + 0.1665405, 77.59, window=("09:00", "16:00"), priority=5)
     protected = allocate([tech], [far], Weights(w_unassigned=1))
     unprotected = allocate([tech], [far], Weights(w_unassigned=1, must_serve_p5=False))
     for name in ALGORITHMS:
@@ -286,7 +286,7 @@ def test_explanations_name_the_real_reason():
     cheap_drop = allocate(scenario.technicians, scenario.requests, CHEAP_DROP)
     dropped = next(row for row in cheap_drop.results.hungarian.assignments if row.request_id == "panel")
     assert "left open in the minimum-cost plan" in dropped.explanation
-    assert "25.0" in dropped.explanation
+    assert "35.0" in dropped.explanation
     assert "already full" not in dropped.explanation
 
 

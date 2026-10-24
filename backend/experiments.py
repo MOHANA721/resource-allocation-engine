@@ -69,7 +69,7 @@ def compare_distance_sources() -> None:
     """Needs internet for OSRM; falls back to the detour factor without it."""
     print("distance sources: trap and the default scenario (12 technicians, 20 requests, seed 1)")
     for label, scenario in (("trap", trap_scenario()), ("default", generate(12, 20, 1, 0.4))):
-        for source in ("straight", "detour", "osrm"):
+        for source in ("detour", "osrm"):
             outcome = allocate(scenario.technicians, scenario.requests, distance=source)
             costs = "  ".join(
                 f"{name} {getattr(outcome.results, name).metrics.total_cost:.1f}"

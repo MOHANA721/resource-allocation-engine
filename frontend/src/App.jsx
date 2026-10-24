@@ -238,7 +238,7 @@ export default function App() {
         </label>
         <label>
           Unassigned weight {weights.w_unassigned}
-          <input type="range" min="0" max="80" step="5" value={weights.w_unassigned} onChange={(event) => setWeights({ ...weights, w_unassigned: Number(event.target.value) })} />
+          <input type="range" min="0" max="80" step="1" value={weights.w_unassigned} onChange={(event) => setWeights({ ...weights, w_unassigned: Number(event.target.value) })} />
         </label>
         <label>
           Distance source

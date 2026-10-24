@@ -155,7 +155,7 @@ def test_a_request_for_an_unoffered_skill_is_rejected():
         allocate([tech], [gap])
     response = client.post(
         "/api/allocate",
-        json={"technicians": [tech.model_dump()], "requests": [gap.model_dump()], "distance": "straight"},
+        json={"technicians": [tech.model_dump()], "requests": [gap.model_dump()], "distance": "detour"},
     )
     assert response.status_code == 422
     assert "hvac" in response.json()["detail"]

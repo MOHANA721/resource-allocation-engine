@@ -40,7 +40,7 @@ class Weights(BaseModel):
     must_serve_p5: bool = Field(True, description="Never leave a priority-5 request open if it can be served")
 
 
-DistanceSource = Literal["osrm", "detour", "straight"]
+DistanceSource = Literal["osrm", "detour"]
 
 
 class Assignment(BaseModel):
@@ -98,8 +98,8 @@ class AllocateRequest(BaseModel):
     weights: Weights = Weights()
     distance: DistanceSource = Field(
         "osrm",
-        description="osrm: road distances, falling back to detour if OSRM is unreachable. "
-        "detour: straight line times 1.35. straight: straight line",
+        description="osrm: road distances, falling back to straight line times 1.35 if OSRM is unreachable. "
+        "detour: straight line times 1.35.",
     )
 
 
@@ -111,5 +111,5 @@ class AllocateResults(BaseModel):
 
 class AllocateResponse(BaseModel):
     results: AllocateResults
-    distance_source: str = "straight"
-    distance_note: str = "Straight-line distances."
+    distance_source: str = "detour"
+    distance_note: str = "Straight-line distances × 1.35 for road detours."

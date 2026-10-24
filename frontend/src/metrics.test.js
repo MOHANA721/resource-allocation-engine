@@ -21,9 +21,9 @@ function metrics(overrides = {}) {
 }
 
 const trap = {
-  greedy: { metrics: metrics({ total_cost: 150.26, assigned_count: 1, unassigned_count: 1, priority_coverage: 0.5, high_priority_unassigned_count: 1, urgent_assigned_km: 0.26, total_km: 0.26, workload_std: 0.5, optimality_gap: 143.99 }) },
-  hungarian: { metrics: metrics({ total_cost: 6.27, total_km: 6.27, urgent_assigned_km: 6.27 }) },
-  regret: { metrics: metrics({ total_cost: 6.27, total_km: 6.27, urgent_assigned_km: 6.27, runtime_ms: 0.1 }) },
+  greedy: { metrics: metrics({ total_cost: 150.35, assigned_count: 1, unassigned_count: 1, priority_coverage: 0.5, high_priority_unassigned_count: 1, urgent_assigned_km: 0.35, total_km: 0.35, workload_std: 0.5, optimality_gap: 141.88 }) },
+  hungarian: { metrics: metrics({ total_cost: 8.47, total_km: 8.47, urgent_assigned_km: 8.47 }) },
+  regret: { metrics: metrics({ total_cost: 8.47, total_km: 8.47, urgent_assigned_km: 8.47, runtime_ms: 0.1 }) },
 };
 
 describe("metric columns", () => {
@@ -64,14 +64,14 @@ describe("metricText", () => {
 describe("bestValues", () => {
   it("marks the lowest cost and the highest coverage on the trap", () => {
     const best = bestValues(trap);
-    expect(best.total_cost).toBe(6.27);
+    expect(best.total_cost).toBe(8.47);
     expect(best.assigned).toBe(2);
     expect(best.coverage).toBe(1);
     expect(best.urgent_misses).toBe(0);
   });
 
   it("marks greedy's short urgent travel as lowest even though it loses on cost", () => {
-    expect(bestValues(trap).urgent_km).toBe(0.26);
+    expect(bestValues(trap).urgent_km).toBe(0.35);
   });
 
   it("returns nothing before results arrive", () => {

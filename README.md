@@ -96,7 +96,7 @@ python backend\experiments.py
 PYTHONPATH=backend python backend/experiments.py
 ```
 
-The sweeps use straight-line distances so they are reproducible offline. The final comparison of distance sources calls OSRM.
+The sweeps use straight line × 1.35 so they are reproducible offline. The final comparison of distance sources calls OSRM.
 
 ## Approach
 

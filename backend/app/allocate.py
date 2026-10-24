@@ -421,10 +421,10 @@ def allocate(
     techs: list[Technician],
     requests: list[Request],
     weights: Weights | None = None,
-    distance: DistanceSource = "straight",
+    distance: DistanceSource = "detour",
 ) -> AllocateResponse:
     """All three algorithms on one scenario. The API defaults ``distance`` to
-    OSRM; this function defaults to straight line so direct calls work offline."""
+    OSRM; this function defaults to straight line × 1.35 so direct calls work offline."""
     weights = weights or Weights()
     _require_offered_skills(techs, requests)
     points = [point(tech.lat, tech.lng) for tech in techs] + [point(request.lat, request.lng) for request in requests]

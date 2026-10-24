@@ -1,4 +1,4 @@
-"""Where kilometres come from: OSRM road distances, or straight line with or without a detour factor.
+"""Where kilometres come from: OSRM road distances, or straight line × 1.35.
 
 ``allocate`` builds one table per call and makes it current for the duration
 of that call; every distance lookup in the engine goes through ``km``.
@@ -64,8 +64,9 @@ class DistanceTable:
         return haversine_km(*a, *b) * self.factor
 
 
-_STRAIGHT = DistanceTable("straight", "Straight-line distances.")
-_current: contextvars.ContextVar[DistanceTable] = contextvars.ContextVar("distance_table", default=_STRAIGHT)
+_DETOUR_NOTE = f"Straight-line distances × {DETOUR_FACTOR} for road detours."
+_DETOUR = DistanceTable("detour", _DETOUR_NOTE, factor=DETOUR_FACTOR)
+_current: contextvars.ContextVar[DistanceTable] = contextvars.ContextVar("distance_table", default=_DETOUR)
 _cache: dict[tuple[Point, Point], float | None] = {}
 _osrm_lock = threading.Lock()
 _last_call = 0.0
@@ -141,11 +142,8 @@ def road_pairs(points: list[Point]) -> dict[tuple[Point, Point], float]:
 
 
 def build(points: list[Point], source: DistanceSource) -> DistanceTable:
-    if source == "straight":
-        return _STRAIGHT
-    detour_note = f"Straight-line distances × {DETOUR_FACTOR} for road detours."
     if source == "detour":
-        return DistanceTable("detour", detour_note, factor=DETOUR_FACTOR)
+        return _DETOUR
     try:
         pairs = road_pairs(points)
     except OsrmError as error:
