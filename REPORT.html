@@ -163,7 +163,7 @@
     <tr><td><code>GET /api/health</code></td><td>—</td><td>Liveness check.</td></tr>
     <tr><td><code>POST /api/scenario</code></td><td><code>n_techs</code> (1–40), <code>n_requests</code> (0–80), <code>seed</code>, <code>scarcity</code> (0–1)</td><td>Technicians and requests.</td></tr>
     <tr><td><code>GET /api/scenario/trap</code></td><td>—</td><td>The hand-built case in Section 8.1.</td></tr>
-    <tr><td><code>POST /api/allocate</code></td><td>Technicians, requests, <code>weights</code> (<code>w_distance</code>, <code>w_balance</code>, <code>w_unassigned</code>, <code>must_serve_p5</code>), <code>distance</code> (<code>osrm</code> by default, <code>detour</code>, or <code>straight</code>)</td><td>Skill gaps; assignments and metrics for each algorithm; <code>distance_source</code> and <code>distance_note</code> stating which distances were actually used.</td></tr>
+    <tr><td><code>POST /api/allocate</code></td><td>Technicians, requests, <code>weights</code> (<code>w_distance</code>, <code>w_balance</code>, <code>w_unassigned</code>, <code>must_serve_p5</code>), <code>distance</code> (<code>osrm</code> by default, or <code>detour</code> for straight line × 1.35)</td><td>Skill gaps; assignments and metrics for each algorithm; <code>distance_source</code> and <code>distance_note</code> stating which distances were actually used.</td></tr>
   </table>
   <h3>4.2 Design decisions</h3>
   <ul>
@@ -172,14 +172,14 @@
     <li><b>Honest metrics.</b> A request needing a skill nobody has is reported as a skill gap and excluded from every algorithm's score, so "unserved" always reflects an algorithm's decision rather than impossible data.</li>
     <li><b>Fair comparison.</b> One API call runs all three algorithms on the identical input with the identical rules, cost, and distance table.</li>
     <li><b>Road distances without a key.</b> The public OSRM server returns a full distance table in one request for up to 100 points. Larger scenarios are fetched in blocks of 50, so a 120-point scenario takes 3 requests. Results are cached, so moving a weight slider does not refetch. If OSRM is unreachable, the engine uses straight line × 1.35 and says so.</li>
-    <li><b>Offline tests.</b> The tests replace the OSRM call with a deterministic fake, and the experiments use straight-line distances, so both run without internet and give the same numbers every time.</li>
+    <li><b>Offline tests.</b> The tests replace the OSRM call with a deterministic fake, so they run without internet and give the same numbers every time.</li>
   </ul>
   <h3>4.3 Code layout</h3>
   <table>
     <tr><th>File</th><th>Responsibility</th></tr>
     <tr><td><code>backend/app/models.py</code></td><td>Pydantic models and input validation.</td></tr>
     <tr><td><code>backend/app/generator.py</code></td><td>Seeded scenario generator and the trap scenario.</td></tr>
-    <tr><td><code>backend/app/distances.py</code></td><td>Distance sources: OSRM road table (blocked, cached, throttled to one request per second), detour factor, straight line.</td></tr>
+    <tr><td><code>backend/app/distances.py</code></td><td>Distance sources: OSRM road table (blocked, cached, throttled to one request per second) and the 1.35 detour factor.</td></tr>
     <tr><td><code>backend/app/constraints.py</code></td><td>Travel time, hard-constraint check, cost and penalty.</td></tr>
     <tr><td><code>backend/app/allocate.py</code></td><td>Skill gaps, the three algorithms, explanations, metrics.</td></tr>
     <tr><td><code>backend/app/main.py</code></td><td>FastAPI routes and CORS.</td></tr>
@@ -281,7 +281,7 @@ total cost        = Σ assignment costs  +  Σ unserved penalties</pre>
 <!-- 8 -->
 <section id="cases">
   <h2>8. Case studies</h2>
-  <p>Each case is small enough to verify by hand. All figures are produced by the engine and most are asserted in the test suite. Cases 8.1 to 8.8 use straight-line distances so the kilometres can be checked with a ruler. The screen offers road distances and straight line × 1.35. Case 8.9 shows how those two change the figures.</p>
+  <p>Each case is small enough to verify by hand. All figures are produced by the engine and most are asserted in the test suite. Cases 8.1 to 8.8 give the hand-checked kilometres for each assignment. The screen offers road distances and straight line × 1.35. Case 8.9 shows how those two change the figures.</p>
 
   <div class="case">
     <h3>8.1 Greedy strands a specialist (the "trap" scenario)</h3>
@@ -393,18 +393,16 @@ total cost        = Σ assignment costs  +  Σ unserved penalties</pre>
   </div>
 
   <div class="case">
-    <h3>8.9 Road distances versus straight lines</h3>
-    <p><span class="lbl">Setup</span>The same two scenarios solved with each distance source. OSRM values are the real Bengaluru road network at the time of writing.</p>
+    <h3>8.9 Road distances and straight line × 1.35</h3>
+    <p><span class="lbl">Setup</span>The same two scenarios solved with each distance source on the screen. OSRM values are the real Bengaluru road network at the time of writing.</p>
     <table>
       <tr><th>Scenario</th><th>Distance source</th><th class="num">Greedy</th><th class="num">Hungarian</th><th class="num">Regret</th></tr>
-      <tr><td rowspan="3">Trap (8.1)</td><td>Straight line</td><td class="num">150.3</td><td class="num">6.3</td><td class="num">6.3</td></tr>
-      <tr><td>Straight line × 1.35</td><td class="num">150.3</td><td class="num">8.5</td><td class="num">8.5</td></tr>
+      <tr><td rowspan="2">Trap (8.1)</td><td>Straight line × 1.35</td><td class="num">150.3</td><td class="num">8.5</td><td class="num">8.5</td></tr>
       <tr><td>Road (OSRM)</td><td class="num">150.3</td><td class="num">9.6</td><td class="num">9.6</td></tr>
-      <tr><td rowspan="3">Default (12 technicians, 20 requests, seed 1)</td><td>Straight line</td><td class="num">192.2</td><td class="num">166.7</td><td class="num">214.1</td></tr>
-      <tr><td>Straight line × 1.35</td><td class="num">249.8</td><td class="num">211.8</td><td class="num">267.3</td></tr>
+      <tr><td rowspan="2">Default (12 technicians, 20 requests, seed 1)</td><td>Straight line × 1.35</td><td class="num">249.8</td><td class="num">211.8</td><td class="num">267.3</td></tr>
       <tr><td>Road (OSRM)</td><td class="num">245.2</td><td class="num">211.2</td><td class="num">237.8</td></tr>
     </table>
-    <p><span class="lbl">Lesson</span>Road distances are about a third longer than straight lines here, so costs rise. Hungarian still gives the lowest total. The ranking of greedy and regret can change: on the default scenario, regret is worst on straight lines and better than greedy on roads. The detour factor approximates the road total well (211.8 against 211.2 for Hungarian), but it does not reproduce individual road choices, which is why OSRM is the default.</p>
+    <p><span class="lbl">Lesson</span>Hungarian still gives the lowest total. The ranking of greedy and regret can change: on the default scenario, regret costs more than greedy at × 1.35 (267.3 against 249.8) and less than greedy on roads (237.8 against 245.2). The detour factor approximates the road total well (211.8 against 211.2 for Hungarian), but it does not reproduce individual road choices, which is why OSRM is the default.</p>
   </div>
 </section>
 
@@ -472,7 +470,7 @@ total cost        = Σ assignment costs  +  Σ unserved penalties</pre>
 <!-- 11 -->
 <section id="results">
   <h2>11. Experimental results</h2>
-  <p>Produced by <code>backend/experiments.py</code>. Each row averages 30 seeded scenarios with 10 technicians and default weights. Gap = (algorithm cost − Hungarian cost) ÷ Hungarian cost. Sections 11.1 to 11.3 use straight-line distances, so they run offline and are exactly reproducible; Section 11.4 compares distance sources.</p>
+  <p>Produced by <code>backend/experiments.py</code>. Each row averages 30 seeded scenarios with 10 technicians and default weights. Gap = (algorithm cost − Hungarian cost) ÷ Hungarian cost. Sections 11.1 to 11.3 run offline and are exactly reproducible; Section 11.4 compares the two distance sources.</p>
   <h3>11.1 Effect of demand (scarcity 0.4)</h3>
   <table>
     <tr><th class="num">Requests</th><th class="num">Greedy gap</th><th class="num">Regret gap</th><th class="num">Runtime ms (greedy / Hungarian / regret)</th></tr>
